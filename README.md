@@ -10,6 +10,7 @@ Components implemented :
 - experiment#1 : validation of PTP state machine model (does the model behave like the math)
 - experiment#2 : Full sim (PTP FSM + clock model + legacy orbit model, no doppler shift)
 
+
 TODO : 
 - experiment#3 : Full sim (PTP FSM + clock model + satcom orbit propagator, with doppler shift)
 
