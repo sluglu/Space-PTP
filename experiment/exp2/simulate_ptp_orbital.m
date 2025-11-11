@@ -6,7 +6,8 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
     min_los_duration = sim_params.min_los_duration;
 
     % Extract ptp parameters
-    f0 = ptp_params.f0;
+    master_f0 = ptp_params.master_f0;
+    slave_f0 = ptp_params.slave_f0;
     sync_interval = ptp_params.sync_interval;
     verbose = ptp_params.verbose;
     min_msg_interval = ptp_params.min_msg_interval;
@@ -25,8 +26,8 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
     params2 = struct('r', r2_val, 'i', i2, 'theta0', th2, 'RAAN', omega2);
     
     % Initialize PTP components
-    clock_master = WRClock(f0, t0, master_noise_profile);
-    clock_slave = WRClock(f0, t0 + initial_time_offset, slave_noise_profile);
+    clock_master = WRClock(master_f0, t0, master_noise_profile);
+    clock_slave = WRClock(slave_f0, t0 + initial_time_offset, slave_noise_profile);
     
     master = MasterNode(clock_master, MasterFSM(sync_interval, verbose));
     slave = SlaveNode(clock_slave, SlaveFSM(verbose));

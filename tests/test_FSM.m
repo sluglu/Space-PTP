@@ -1,4 +1,4 @@
-clear; clc;
+clear; clc; close all;
 
 %% Parameters
 sim_duration = 10;     % seconds

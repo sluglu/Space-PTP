@@ -1,18 +1,16 @@
-# WR-over-FSO-model
-A MATLAB model for simulating White Rabbit (WR) synchronization in orbital scenarios using Free-Space Optics (FSO) communication behavior.
+# SPACE-PTP-model
+A MATLAB model for simulating PTP synchronization scheme in orbital scenarios.
 
 Components implemented :
-- clock module
-- Node object
-- noise profile submodule (for the clocks)
-- PTP FSM module
-- experiment#1 : PTP offset error / asymetric delay STD (fast changing delay and delay asymetry)
-- orbit model
-- experiment#2 : PTP + orbital scenario (all parameters exposed)
+- clock_model + noise_injection : power law oscillator model
+- FSM : PTP state machine model
+- orbit_model : legacy ideal orbit model (currently using orbit propagator from satcom toolbox for exp3)
+- node : parent object for clock and FSM (sattelites/ground station)
+- tests : tests scripts for clock_model, FSM, orbit_model (ideal and propagator)
+- experiment#1 : validation of PTP state machine model (does the model behave like the math)
+- experiment#2 : Full sim (PTP FSM + clock model + legacy orbit model, no doppler shift)
 
 TODO : 
+- experiment#3 : Full sim (PTP FSM + clock model + satcom orbit propagator, with doppler shift)
 
 
-the sytem is modeled as perfect (white rabbit work perfectly and in this case how PTP react): 
-- Perfect L1 syntonization (slave perfectly recover incoming frequency)
-- Timestamp are fractional (not limited to clock cycle resolution)

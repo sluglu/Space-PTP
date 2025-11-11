@@ -1,5 +1,4 @@
-%% Example: Using Power Law Noise in Clock Models
-clear; clc;
+clear; clc; close all;
 
 %% Simulation Parameters
 dt = 0.01;
@@ -36,6 +35,13 @@ master_freq = zeros(1, N);
 slave_freq = zeros(1, N);
 
 %% Run Simulation
+
+% Create progress tracker object
+progress = ProgressTracker(100);
+
+% Start waitbar
+progress.start();
+
 fprintf('Simulating %d samples over %.1f hours...\n', N, sim_duration/3600);
 
 for i = 1:N
@@ -44,10 +50,16 @@ for i = 1:N
     master_clock = master_clock.advance(dt);
     slave_clock = slave_clock.advance(dt);
     
-    if mod(i, floor(N/10)) == 0
-        fprintf('Progress: %.0f%%\n', 100*i/N);
+    if mod(i, ceil(N/100)) == 0
+        progress.update()
     end
 end
+
+% Clean up
+progress.finish();
+
+elapsed_time = toc;
+fprintf('Simulation completed in %.2f seconds\n', elapsed_time);
 
 %% Analysis and Plotting
 figure('Position', [100, 100, 1200, 800]); % Adjusted for 3x2 layout
