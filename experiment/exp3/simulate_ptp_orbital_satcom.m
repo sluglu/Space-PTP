@@ -1,9 +1,10 @@
-function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
+function [results] = simulate_ptp_orbital_satcom(sim_params, ptp_params, scenario)
     % Extract sim parameters
     dt_ptp = sim_params.dt_ptp;
     dt_orbital = sim_params.dt_orbital;
     sim_duration = sim_params.sim_duration;
     min_los_duration = sim_params.min_los_duration;
+    orbit_propagator = sim_params.orbit_propagator;
 
     % Extract ptp parameters
     master_f0 = ptp_params.master_f0;
@@ -16,14 +17,24 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
     t0 = ptp_params.t0;
     initial_time_offset = ptp_params.initial_time_offset;
 
-    % Extract orbital scenario parameters
-    r1_val = scenario{2}; r2_val = scenario{3};
-    i1 = scenario{4};     i2 = scenario{5};
-    th1 = scenario{6};    th2 = scenario{7};
-    omega1 = scenario{8}; omega2 = scenario{9};
+    % Extract orbital scenario parameters (Keplerian elements)
+    name = scenario{1};
+    a1 = scenario{2};    e1 = scenario{3};    i1 = scenario{4};
+    raan1 = scenario{5}; argp1 = scenario{6}; ta1 = scenario{7};
+    a2 = scenario{8};    e2 = scenario{9};    i2 = scenario{10};
+    raan2 = scenario{11}; argp2 = scenario{12}; ta2 = scenario{13};
     
-    params1 = struct('r', r1_val, 'i', i1, 'theta0', th1, 'RAAN', omega1);
-    params2 = struct('r', r2_val, 'i', i2, 'theta0', th2, 'RAAN', omega2);
+    % Create satellite scenario
+    startTime = datetime(2025,11,05,0,0,0,'TimeZone','UTC');
+    stopTime  = startTime + hours(sim_duration);
+    % IMPORTANT: Use dt_orbital as SampleTime for the scenario
+    sc = satelliteScenario(startTime, stopTime, dt_orbital);
+    
+    % Add satellites with specified orbital elements
+    sat1 = satellite(sc, a1, e1, i1, raan1, argp1, ta1, ...
+                    'OrbitPropagator', orbit_propagator, 'Name', 'Master');
+    sat2 = satellite(sc, a2, e2, i2, raan2, argp2, ta2, ...
+                    'OrbitPropagator', orbit_propagator, 'Name', 'Slave');
     
     % Initialize PTP components
     clock_master = WRClock(master_f0, t0, master_noise_profile);
@@ -32,10 +43,40 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
     master = MasterNode(clock_master, MasterFSM(sync_interval, verbose));
     slave = SlaveNode(clock_slave, SlaveFSM(verbose));
 
-    % Generate Orbital Functions and LOS Data
-    [r1, r2] = generate_position_functions(params1, params2);
+    % Generate time span and pre-compute all satellite data in batch
     tspan = 0:dt_orbital:sim_duration*3600;
-    [los_intervals, los_flags] = compute_los_intervals(r1, r2, tspan);
+    fprintf('Main simulation will run from %.1f to %.1f seconds\n', tspan(1), tspan(end));
+    
+    sat_data = precompute_satellite_data(sat1, sat2, startTime, tspan, master_f0, slave_f0);
+    
+    % Use satellite data for LOS flags (already computed in sat_data)
+    los_flags = sat_data.los_flags;
+    
+    % Compute LOS intervals from the satellite data
+    los_intervals = [];
+    in_los = false;
+    t_start = NaN;
+    
+    for k = 1:length(sat_data.tspan)
+        if sat_data.los_flags(k) && ~in_los
+            t_start = sat_data.tspan(k);
+            in_los = true;
+        elseif ~sat_data.los_flags(k) && in_los
+            t_end = sat_data.tspan(k-1);
+            los_intervals = [los_intervals; t_start, t_end];
+            in_los = false;
+        end
+    end
+    if in_los
+        los_intervals = [los_intervals; t_start, sat_data.tspan(end)];
+    end
+    
+    % Interpolate los_flags to match tspan resolution if needed
+    if length(sat_data.tspan) ~= length(tspan)
+        fprintf('Interpolating LOS flags to match simulation resolution...\n');
+        los_flags = interp1(sat_data.tspan, double(sat_data.los_flags), tspan, 'nearest', 0);
+        los_flags = logical(los_flags);
+    end
     
     % Filter LOS intervals by minimum duration
     valid_intervals = [];
@@ -63,6 +104,8 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
     real_freq_shift = nan(max_steps, 1);
     forward_propagation_delays = nan(max_steps, 1);
     backward_propagation_delays = nan(max_steps, 1);
+    forward_doppler_shifts = nan(max_steps, 1);
+    backward_doppler_shifts = nan(max_steps, 1);
     los_status = zeros(max_steps, 1);
     
     % Message queue
@@ -101,15 +144,15 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
         real_freq_shift(i) = slave.get_freq() - master.get_freq();
         
         if los_status(i)
-            % Calculate propagation delay
-            forward_propagation_delays(i)= compute_propagation_delay(r1, r2, sim_time, forward_propagation_delays(max(i-1,1)));
-            backward_propagation_delays(i) = compute_propagation_delay(r2, r1, sim_time, backward_propagation_delays(max(i-1,1)));
+            % Use pre-computed satellite data via interpolation
+            forward_propagation_delays(i) = sat_data.forward_delay_interp(sim_time);
+            backward_propagation_delays(i) = sat_data.backward_delay_interp(sim_time);
+            forward_doppler_shifts(i) = sat_data.forward_doppler_interp(sim_time);
+            backward_doppler_shifts(i) = sat_data.backward_doppler_interp(sim_time);
 
             % PTP operation during LOS
             [master, master_msgs] = master.step(actual_dt);       
             [slave, slave_msgs] = slave.step(actual_dt);
-
-            
             
             % Enqueue messages with propagation delay
             for j = 1:length(master_msgs)
@@ -120,10 +163,11 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
                     temp_queue(1:queue_size-1, :) = msg_queue(1:queue_size-1, :);
                     msg_queue = temp_queue;
                 end
+                % Use interpolated delay for message timing
                 if j == 1
                     prop = forward_propagation_delays(i);
                 else
-                    prop = compute_propagation_delay(r1, r2, sim_time + (j-1)*min_msg_interval, forward_propagation_delays(max(i-1,1))); % MS -> r1r2
+                    prop = sat_data.forward_delay_interp(sim_time + (j-1)*min_msg_interval);
                 end
                 msg_queue{queue_size, 1} = 'slave';
                 msg_queue{queue_size, 2} = master_msgs{j};
@@ -138,10 +182,11 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
                     temp_queue(1:queue_size-1, :) = msg_queue(1:queue_size-1, :);
                     msg_queue = temp_queue;
                 end
+                % Use interpolated delay for message timing
                 if j == 1
                     prop = backward_propagation_delays(i);
                 else
-                    prop = compute_propagation_delay(r2, r1, sim_time + (j-1)*min_msg_interval, backward_propagation_delays(max(i-1,1))); %SM ->r2r1
+                    prop = sat_data.backward_delay_interp(sim_time + (j-1)*min_msg_interval);
                 end
                 msg_queue{queue_size, 1} = 'master';
                 msg_queue{queue_size, 2} = slave_msgs{j};
@@ -202,7 +247,7 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
             % No LOS - advance with orbital time step
             master = master.advance_time(dt_orbital);
             slave = slave.advance_time(dt_orbital);
-            slave = slave.reset_ptp_estimate(); % to remove abberation at start of LOS intervals
+            slave = slave.reset_ptp_estimate();
             queue_size = 0;
             sim_time = sim_time + dt_orbital;
             
@@ -226,12 +271,15 @@ function [results] = simulate_ptp_orbital(sim_params, ptp_params, scenario)
     results.real_freq_shift = real_freq_shift;
     results.forward_propagation_delays = forward_propagation_delays;
     results.backward_propagation_delays = backward_propagation_delays;
+    results.forward_doppler_shifts = forward_doppler_shifts;
+    results.backward_doppler_shifts = backward_doppler_shifts;
     results.los_status = los_status;
     results.los_flags = los_flags;
     results.total_duration = total_duration;
     results.tspan = tspan;
-    results.r1 = r1;
-    results.r2 = r2;
+    results.sat1 = sat1;
+    results.sat2 = sat2;
+    results.startTime = startTime;
     results.los_intervals = valid_intervals;
     results.sim_duration = sim_duration;
     results.scenario = scenario;

@@ -10,9 +10,6 @@ function plot_PTP_orbital_scenario_lite(results)
     
     figure('Position', [100, 100, 1400, 800]);
     
-    % --- Main Title and Scenario Parameters Annotation ---
-    % Do this first so we know where the plots should go underneath
-    
     % Set the main title for the figure
     name = results.scenario{1};
     sgtitle(sprintf('PTP Orbital Simulation Results - %s', name), 'FontSize', 16, 'FontWeight', 'bold');
@@ -30,8 +27,6 @@ function plot_PTP_orbital_scenario_lite(results)
     s2_params_str = sprintf('S2: Altitude=%.0f km, Inclination=%.1f°, Anomaly=%.1f°, RAAN=%.1f°', (alt2 - rE)*1e-3, inc2/deg, anom2/deg, raan2/deg);
     full_param_str = {s1_params_str, s2_params_str};
 
-    % **UPDATED SECTION:** Add annotation textbox with a lowered vertical position
-    % The position is normalized: [left, bottom, width, height]
     annotation('textbox', [0.15, 0.88, 0.7, 0.05], ... % Lowered 'bottom' from 0.9 to 0.88
                'String', full_param_str, ...
                'EdgeColor', 'none', ...
@@ -39,10 +34,8 @@ function plot_PTP_orbital_scenario_lite(results)
                'FontSize', 10, ...
                'FontWeight', 'normal');
 
-    % --- Plots Section ---
+    % Plots
 
-    % **UPDATED SECTION:** Plot 1 with custom position to move it down
-    % Using 'Position' to manually place the subplot axes
     subplot('Position', [0.13, 0.65, 0.775, 0.2]); % Lowered 'bottom' and adjusted height
     plot(results.times/60, results.forward_propagation_delays, 'r', 'DisplayName', 'Forward Propagation Delay');
     hold on;
@@ -55,10 +48,8 @@ function plot_PTP_orbital_scenario_lite(results)
     legend('show', 'Location', 'best');
     grid on;
     
-    % Plot 2: Clock synchronization performance (its position is relative to the first)
     subplot('Position', [0.13, 0.35, 0.775, 0.2]); % Standard position for bottom plot
     hold on;
-    % Clock offset plots
     plot(results.times/60, results.real_offset, 'r-', 'LineWidth', 1.5, 'DisplayName', 'True Offset');
     plot(results.times/60, results.ptp_offset, '-b', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
     
@@ -69,8 +60,6 @@ function plot_PTP_orbital_scenario_lite(results)
     grid on;
     hold off;
 
-
-    % Plot 3: Clock synchronization performance (its position is relative to the first)
     subplot('Position', [0.13, 0.05, 0.775, 0.2]); % Standard position for bottom plot
     hold on;
     plot(results.times/60, results.ptp_offset - results.real_offset, '-g', 'LineWidth', 1.5, 'DisplayName', 'PTP Offset Error');
