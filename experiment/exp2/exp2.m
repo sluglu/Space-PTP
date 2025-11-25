@@ -39,9 +39,9 @@ rubidium_params = struct( ...
         'timestamp_resolution', 0);
 
 master_f0 = 10e6;  
-master_noise_profile = NoiseProfile(rubidium_params);
+master_noise_profile = NoiseProfile();
 slave_f0 = 100e6;
-slave_noise_profile = NoiseProfile(ocxo_params1);
+slave_noise_profile = NoiseProfile();
 
 scenarios = {
     "Starlink Gen 2 (Same-Plane)",  rE+530e3, rE+530e3, 53*deg,  53*deg,     10*deg,       26.4*deg        15*deg,       15*deg;

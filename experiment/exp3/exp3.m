@@ -40,16 +40,16 @@ rubidium_params = struct( ...
     'timestamp_resolution', 0);
 
 master_f0 = 10e6;  
-master_noise_profile = NoiseProfile(rubidium_params);
+master_noise_profile = NoiseProfile();
 slave_f0 = 100e6;
-slave_noise_profile = NoiseProfile(ocxo_params1);
+slave_noise_profile = NoiseProfile();
 
 % Scenario Parameters (orbital elements)
 % Format: [name, a1, e1, i1, raan1, argp1, ta1, a2, e2, i2, raan2, argp2, ta2]
 scenarios = {
     "Starlink Gen 2 (Same-Plane)",  6901e3, 0.001, 53,  0,   0,   10,    6901e3, 0.001, 53,  0,   0,   26.4;
     "Starlink Gen 2 (Cross-Plane)", 6901e3, 0.001, 53,  0,   0,   10,    6901e3, 0.001, 53,  18,  0,   20;       
-    "Starlink Gen 2 (Inter-Shell)", 6906e3, 0.001, 53,  0,   0,   20,    6901e3, 0.001, 53,  35,  0,   17;
+    "Starlink Gen 2 (Inter-Shell)", 6906e3, 0.001, 53,  15,   0,   20,    6901e3, 0.001, 53,  17,  0,   35;
 };
 
 % Packing parameters
