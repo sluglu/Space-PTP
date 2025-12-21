@@ -6,9 +6,9 @@ deg = pi/180;
 rE = 6371e3;
 
 % Simulation Parameters
-dt_ptp = 0.1;              % PTP simulation time step [s]
+dt_ptp = 0.01;             % PTP simulation time step [s]
 dt_orbital = 1;            % Orbital position update interval [s]
-sim_duration = 2;          % Total simulation duration [hours]
+sim_duration = 0.01;       % Total simulation duration [hours]
 min_los_duration = 1;      % Minimum LOS duration to simulate PTP [s]
 orbit_propagator = 'sgp4'; % Orbit propagator type
 
@@ -21,12 +21,7 @@ verbose = false;
 
 % Noise Profiles Parameters
 % High-Performance OCXO (100MHz OX-249)
-ocxo_params1 = struct(...
-    'delta_f0', (rand() * 2 * 50) - 50, ...
-    'alpha', (rand() * 2 * 1.58e-6) - 1.58e-6, ...
-    'power_law_coeffs', [0, 4.62e-23, 1.58e-25, 0, 1.0e-32], ...
-    'timestamp_resolution', 0);
-ocxo_params2 = struct(...
+ocxo_params = struct(...
     'delta_f0', (rand() * 2 * 50) - 50, ...
     'alpha', (rand() * 2 * 1.58e-6) - 1.58e-6, ...
     'power_law_coeffs', [0, 4.62e-23, 1.58e-25, 0, 1.0e-32], ...
@@ -40,9 +35,9 @@ rubidium_params = struct( ...
     'timestamp_resolution', 0);
 
 master_f0 = 10e6;  
-master_noise_profile = NoiseProfile();
+master_noise_profile = NoiseProfile(rubidium_params);
 slave_f0 = 100e6;
-slave_noise_profile = NoiseProfile();
+slave_noise_profile = NoiseProfile(ocxo_params);
 
 % Scenario Parameters (orbital elements)
 % Format: [name, a1, e1, i1, raan1, argp1, ta1, a2, e2, i2, raan2, argp2, ta2]
@@ -65,8 +60,8 @@ params = {scenarios, sim_params, ptp_params};
 
 %% Simulation
 scenario_idx = 3; % Select scenario to simulate
-exp_name = "Perfect Hardware";
-%exp_name = "Rb OCXO perfect timestamp";
+%exp_name = "Perfect Hardware";
+exp_name = "Rb OCXO perfect timestamp";
 %exp_name = "two OCXO perfect timestamp";
 
 run_sim(scenario_idx, exp_name, params)
@@ -74,8 +69,8 @@ run_sim(scenario_idx, exp_name, params)
 
 %% Plot Results
 scenario_idx = 3; % Select scenario to plot
-exp_name = "Perfect Hardware";
-%exp_name = "Rb OCXO perfect timestamp";
+%exp_name = "Perfect Hardware";
+exp_name = "Rb OCXO perfect timestamp";
 %exp_name = "two OCXO perfect timestamp";
 
 plot_result(scenario_idx, exp_name, params)
