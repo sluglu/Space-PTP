@@ -1,4 +1,4 @@
-function [sat_data] = precompute_satellite_data(sat1, sat2, startTime, tspan, master_f0, slave_f0)
+function [sat_data] = precompute_satellite_data(sat1, sat2, startTime, tspan, carrier_frequency)
     % Pre-compute all satellite-related data using batch queries
     %
     % Inputs:
@@ -28,12 +28,12 @@ function [sat_data] = precompute_satellite_data(sat1, sat2, startTime, tspan, ma
     fprintf('  Computing forward Doppler shifts...\n');
     tic;
     % dopplershift with Frequency parameter returns Doppler shift in Hz
-    forward_doppler = dopplershift(sat1, sat2, Frequency=master_f0);
+    forward_doppler = dopplershift(sat1, sat2, Frequency=carrier_frequency);
     fprintf('    Done in %.2f seconds\n', toc);
     
     fprintf('  Computing backward Doppler shifts...\n');
     tic;
-    backward_doppler = dopplershift(sat2, sat1, Frequency=slave_f0);
+    backward_doppler = dopplershift(sat2, sat1, Frequency=carrier_frequency);
     fprintf('    Done in %.2f seconds\n', toc);
     
     % Convert time_out (datetime array) to seconds from startTime

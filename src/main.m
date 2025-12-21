@@ -1,21 +1,21 @@
-clear; clc; close all;
+clear; clc;
 
-% cfg = exp_rb_ocxo_inter_shell();
-% results = run_experiment(cfg);
-% plot_experiment(cfg)
+cfg = exp_perfect_inter_shell();
+results = run_experiment(cfg);
+plot_experiment(cfg)
 
 % % Orbital scenario viewer
 % show(results.sat1)
 % show(results.sat2)
 
-% List of experiments to run in parallel
-configs = { ...
-    'exp_rb_ocxo_same_plane', ...
-    'exp_rb_ocxo_cross_plane', ...
-    'exp_rb_ocxo_inter_shell'};
-
-run_all_experiments(configs);
-plot_all_experiments(configs);
+% % List of experiments to run in parallel
+% configs = { ...
+%     'exp_rb_ocxo_same_plane', ...
+%     'exp_rb_ocxo_cross_plane', ...
+%     'exp_rb_ocxo_inter_shell'};
+% 
+% run_all_experiments(configs);
+% plot_all_experiments(configs);
 
 
 

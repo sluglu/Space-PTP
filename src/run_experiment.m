@@ -30,6 +30,8 @@ function [results] = simulate_ptp_orbital(cfg)
     sim_duration = cfg.sim.sim_duration;
     min_los_duration = cfg.sim.min_los_duration;
     orbit_propagator = cfg.sim.orbit_propagator;
+    use_interpolation = cfg.sim.use_interpolation;
+    carrier_frequency = cfg.sim.carrier_frequency;
 
     % Extract ptp parameters
     sync_interval = cfg.ptp.sync_interval;
@@ -75,7 +77,7 @@ function [results] = simulate_ptp_orbital(cfg)
     tspan = 0:dt_orbital:sim_duration*3600;
     fprintf('Main simulation will run from %.1f to %.1f seconds\n', tspan(1), tspan(end));
     
-    sat_data = precompute_satellite_data(sat1, sat2, startTime, tspan, master_f0, slave_f0);
+    sat_data = precompute_satellite_data(sat1, sat2, startTime, tspan, carrier_frequency);
     
     % Use satellite data for LOS flags (already computed in sat_data)
     los_flags = sat_data.los_flags;
@@ -172,11 +174,23 @@ function [results] = simulate_ptp_orbital(cfg)
         real_freq_shift(i) = slave.get_freq() - master.get_freq();
         
         if los_status(i)
-            % Use pre-computed satellite data via interpolation
-            forward_propagation_delays(i) = sat_data.forward_delay_interp(sim_time);
-            backward_propagation_delays(i) = sat_data.backward_delay_interp(sim_time);
-            forward_doppler_shifts(i) = sat_data.forward_doppler_interp(sim_time);
-            backward_doppler_shifts(i) = sat_data.backward_doppler_interp(sim_time);
+            if use_interpolation
+                % Use pre-computed satellite data via interpolation
+                forward_propagation_delays(i) = sat_data.forward_delay_interp(sim_time);
+                backward_propagation_delays(i) = sat_data.backward_delay_interp(sim_time);
+                forward_doppler_shifts(i) = sat_data.forward_doppler_interp(sim_time);
+                backward_doppler_shifts(i) = sat_data.backward_doppler_interp(sim_time);
+            else
+                % Convert current sim_time to a datetime object
+                current_dt = startTime + seconds(sim_time);
+                
+                % Compute exact delays for this specific instant
+                forward_propagation_delays(i) = latency(sat1, sat2, current_dt);
+                backward_propagation_delays(i) = latency(sat2, sat1, current_dt);
+                forward_doppler_shifts(i) = dopplershift(sat1, sat2, current_dt, Frequency=carrier_frequency);
+                backward_doppler_shifts(i) = dopplershift(sat2, sat1, current_dt, Frequency=carrier_frequency);
+            end
+
 
             % PTP operation during LOS
             [master, master_msgs] = master.step(actual_dt);       
