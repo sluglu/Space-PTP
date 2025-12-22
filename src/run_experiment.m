@@ -39,14 +39,6 @@ function [results] = simulate_ptp_orbital(cfg)
     min_msg_interval = cfg.ptp.min_msg_interval;
     verbose = cfg.ptp.verbose;
 
-    % Extract orbital scenario parameters (Keplerian elements)
-    name = cfg.scenario.name;
-    sat1 = cfg.scenario.sat1;
-    sat2 = cfg.scenario.sat2;
-    a1 = sat1{1};    e1 = sat1{2};    i1 = sat1{3};
-    raan1 = sat1{4}; argp1 = sat1{5}; ta1 = sat1{6};
-    a2 = sat2{1};    e2 = sat2{2};    i2 = sat2{3};
-    raan2 = sat2{4}; argp2 = sat2{5}; ta2 = sat2{6};
 
     % Extract oscillators parameters
     master_f0 = cfg.master_ox.f0;
@@ -59,25 +51,45 @@ function [results] = simulate_ptp_orbital(cfg)
     stopTime  = startTime + hours(sim_duration);
     % IMPORTANT: Use dt_orbital as SampleTime for the scenario
     sc = satelliteScenario(startTime, stopTime, dt_orbital);
-    
-    % Add satellites with specified orbital elements
-    sat1 = satellite(sc, a1, e1, i1, raan1, argp1, ta1, ...
+
+    % Extract orbital scenario parameters (Keplerian elements and long/lat)
+    % and add satellites with specified orbital elements
+    name = cfg.scenario.name;
+
+    master_sc = cfg.scenario.master;
+    if max(size(master_sc)) < 3
+        lat = master_sc{1}; long = master_sc{2};
+        master_sc = groundStation(sc, lat, long,"Name", "Master");
+    else
+        a = master_sc{1};    e = master_sc{2};    i = master_sc{3};
+        raan = master_sc{4}; argp = master_sc{5}; ta = master_sc{6};
+        master_sc = satellite(sc, a, e, i, raan, argp, ta, ...
                     'OrbitPropagator', orbit_propagator, 'Name', 'Master');
-    sat2 = satellite(sc, a2, e2, i2, raan2, argp2, ta2, ...
+    end
+
+    slave_sc = cfg.scenario.slave;
+    if max(size(slave_sc)) < 3
+        lat = slave_sc{1}; long = slave_sc{2};
+        slave_sc = groundStation(sc,lat, long,"Name", "Slave");
+    else
+        a = slave_sc{1};    e = slave_sc{2};    i = slave_sc{3};
+        raan = slave_sc{4}; argp = slave_sc{5}; ta = slave_sc{6};
+        slave_sc = satellite(sc, a, e, i, raan, argp, ta, ...
                     'OrbitPropagator', orbit_propagator, 'Name', 'Slave');
+    end
     
     % Initialize PTP components
-    clock_master = WRClock(master_f0, t0, master_noise_profile);
-    clock_slave = WRClock(slave_f0, t0 + initial_time_offset, slave_noise_profile);
+    master_ox = WRClock(master_f0, t0, master_noise_profile);
+    slave_ox = WRClock(slave_f0, t0 + initial_time_offset, slave_noise_profile);
     
-    master = MasterNode(clock_master, MasterFSM(sync_interval, verbose));
-    slave = SlaveNode(clock_slave, SlaveFSM(verbose));
+    master_node = MasterNode(master_ox, MasterFSM(sync_interval, verbose));
+    slave_node = SlaveNode(slave_ox, SlaveFSM(verbose));
 
     % Generate time span and pre-compute all satellite data in batch
     tspan = 0:dt_orbital:sim_duration*3600;
     fprintf('Main simulation will run from %.1f to %.1f seconds\n', tspan(1), tspan(end));
     
-    sat_data = precompute_satellite_data(sat1, sat2, startTime, tspan, carrier_frequency);
+    sat_data = precompute_satellite_data(master_sc, slave_sc, startTime, tspan, carrier_frequency);
     
     % Use satellite data for LOS flags (already computed in sat_data)
     los_flags = sat_data.los_flags;
@@ -168,10 +180,10 @@ function [results] = simulate_ptp_orbital(cfg)
         los_status(i) = los_flags(los_idx);
         
         % Calculate real clock offset 
-        master_time = master.get_time();
-        slave_time = slave.get_time();
+        master_time = master_node.get_time();
+        slave_time = slave_node.get_time();
         real_offset(i) = slave_time - master_time;
-        real_freq_shift(i) = slave.get_freq() - master.get_freq();
+        real_freq_shift(i) = slave_node.get_freq() - master_node.get_freq();
         
         if los_status(i)
             if use_interpolation
@@ -185,16 +197,16 @@ function [results] = simulate_ptp_orbital(cfg)
                 current_dt = startTime + seconds(sim_time);
                 
                 % Compute exact delays for this specific instant
-                forward_propagation_delays(i) = latency(sat1, sat2, current_dt);
-                backward_propagation_delays(i) = latency(sat2, sat1, current_dt);
-                forward_doppler_shifts(i) = dopplershift(sat1, sat2, current_dt, Frequency=carrier_frequency);
-                backward_doppler_shifts(i) = dopplershift(sat2, sat1, current_dt, Frequency=carrier_frequency);
+                forward_propagation_delays(i) = latency(master_sc, slave_sc, current_dt);
+                backward_propagation_delays(i) = latency(slave_sc, master_sc, current_dt);
+                forward_doppler_shifts(i) = dopplershift(master_sc, slave_sc, current_dt, Frequency=carrier_frequency);
+                backward_doppler_shifts(i) = dopplershift(slave_sc, master_sc, current_dt, Frequency=carrier_frequency);
             end
 
 
             % PTP operation during LOS
-            [master, master_msgs] = master.step(actual_dt);       
-            [slave, slave_msgs] = slave.step(actual_dt);
+            [master_node, master_msgs] = master_node.step(actual_dt);       
+            [slave_node, slave_msgs] = slave_node.step(actual_dt);
             
             % Enqueue messages with propagation delay
             for j = 1:length(master_msgs)
@@ -242,9 +254,9 @@ function [results] = simulate_ptp_orbital(cfg)
                 
                 for j = find(to_deliver)
                     if strcmp(msg_queue{j, 1}, 'master')
-                        master = master.receive(msg_queue{j, 2});
+                        master_node = master_node.receive(msg_queue{j, 2});
                     else
-                        slave = slave.receive(msg_queue{j, 2});
+                        slave_node = slave_node.receive(msg_queue{j, 2});
                     end
                 end
                 
@@ -258,7 +270,7 @@ function [results] = simulate_ptp_orbital(cfg)
             end
             
             % Log PTP offset and delay
-            [ptp_offset_log(i), ptp_delay_log(i)] = slave.get_ptp_estimate();
+            [ptp_offset_log(i), ptp_delay_log(i)] = slave_node.get_ptp_estimate();
 
             % Determine next simulation time
             if queue_size > 0
@@ -287,9 +299,9 @@ function [results] = simulate_ptp_orbital(cfg)
             end
         else
             % No LOS - advance with orbital time step
-            master = master.advance_time(dt_orbital);
-            slave = slave.advance_time(dt_orbital);
-            slave = slave.reset_ptp_estimate();
+            master_node = master_node.advance_time(dt_orbital);
+            slave_node = slave_node.advance_time(dt_orbital);
+            slave_node = slave_node.reset_ptp_estimate();
             queue_size = 0;
             sim_time = sim_time + dt_orbital;
             
@@ -319,8 +331,8 @@ function [results] = simulate_ptp_orbital(cfg)
     results.los_flags = los_flags;
     results.total_duration = total_duration;
     results.tspan = tspan;
-    results.sat1 = sat1;
-    results.sat2 = sat2;
+    results.master_sc = master_sc;
+    results.slave_Sc = slave_sc;
     results.startTime = startTime;
     results.los_intervals = valid_intervals;
     results.sim_duration = sim_duration;

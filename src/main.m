@@ -1,12 +1,12 @@
 clear; clc;
 
-cfg = exp_perfect_inter_shell();
+cfg = exp_perfect_meta_ptp();
 results = run_experiment(cfg);
 plot_experiment(cfg)
 
-% % Orbital scenario viewer
-% show(results.sat1)
-% show(results.sat2)
+% Orbital scenario viewer
+show(results.master_sc)
+show(results.slave_sc)
 
 % % List of experiments to run in parallel
 % configs = { ...
