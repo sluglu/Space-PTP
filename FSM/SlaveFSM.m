@@ -12,6 +12,7 @@ classdef SlaveFSM < PTPFSM
 
         last_offset
         last_delay
+        last_rt_delay
     end
 
     methods
@@ -27,6 +28,7 @@ classdef SlaveFSM < PTPFSM
             obj.waiting_delay_resp = false;
             obj.last_offset = NaN;
             obj.last_delay = NaN;
+            obj.last_rt_delay = NaN;
         end
 
         function [obj, msgs] = step(obj, ts)
@@ -63,7 +65,8 @@ classdef SlaveFSM < PTPFSM
                             obj.just_synced = true;  % Mark fresh sync
 
                             % Compute offset and delay
-                            obj.last_delay = ((obj.t2 - obj.t1) + (obj.t4 - obj.t3)) / 2;
+                            obj.last_rt_delay = (obj.t2 - obj.t1) + (obj.t4 - obj.t3);
+                            obj.last_delay = obj.last_rt_delay / 2;
                             obj.last_offset = ((obj.t2 - obj.t1) - (obj.t4 - obj.t3)) / 2;
 
                             if obj.verbose

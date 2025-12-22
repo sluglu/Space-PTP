@@ -57,7 +57,7 @@ function plot_ptp_orbital(results)
     plot(results.times/60, results.backward_propagation_delays, 'b', 'DisplayName', 'Backward Propagation Delay', 'LineWidth', 1.2);
     plot(results.times/60, results.ptp_delay, 'g', 'DisplayName', 'PTP Delay Estimate', 'LineWidth', 1.5);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.sim_duration*60]);
+    xlim([0 results.meta.cfg.sim.sim_duration*60]);
     ylabel('Delay [s]', 'FontSize', 10);
     title('Propagation Delays and PTP Delay Estimate', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
@@ -69,7 +69,7 @@ function plot_ptp_orbital(results)
     hold on;
     plot(results.times/60, results.backward_doppler_shifts, 'b', 'DisplayName', 'Backward Doppler Shift', 'LineWidth', 1.2);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.sim_duration*60]);
+    xlim([0 results.meta.cfg.sim.sim_duration*60]);
     ylabel('Doppler Shift [Hz]', 'FontSize', 10);
     title('Doppler Shifts', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
@@ -82,7 +82,7 @@ function plot_ptp_orbital(results)
     plot(results.times/60, results.ptp_offset, '-b', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
     ylabel('Clock Offset [s]', 'FontSize', 10);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.sim_duration*60]);
+    xlim([0 results.meta.cfg.sim.sim_duration*60]);
     title('Clock Offset and PTP Offset Estimate', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
     grid on;
@@ -109,7 +109,7 @@ function plot_ptp_orbital(results)
     
     ylabel('Offset Error [s]', 'FontSize', 10);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.sim_duration*60]);
+    xlim([0 results.meta.cfg.sim.sim_duration*60]);
     title('PTP Clock Offset Error', 'FontSize', 11, 'FontWeight', 'bold');
     grid on;
     hold off;

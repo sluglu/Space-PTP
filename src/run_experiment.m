@@ -24,6 +24,7 @@ end
 
 function [results] = simulate_ptp_orbital(cfg)
     % Extract sim parameters
+    start_time = cfg.sim.start_time;
     t0 = cfg.sim.t0;
     dt_ptp = cfg.sim.dt_ptp;
     dt_orbital = cfg.sim.dt_orbital;
@@ -47,10 +48,9 @@ function [results] = simulate_ptp_orbital(cfg)
     slave_noise_profile = cfg.slave_ox.np;
     
     % Create satellite scenario
-    startTime = datetime(2025,11,05,0,0,0,'TimeZone','UTC');
-    stopTime  = startTime + hours(sim_duration);
+    stop_time  = start_time + hours(sim_duration);
     % IMPORTANT: Use dt_orbital as SampleTime for the scenario
-    sc = satelliteScenario(startTime, stopTime, dt_orbital);
+    sc = satelliteScenario(start_time, stop_time, dt_orbital);
 
     % Extract orbital scenario parameters (Keplerian elements and long/lat)
     % and add satellites with specified orbital elements
@@ -89,7 +89,7 @@ function [results] = simulate_ptp_orbital(cfg)
     tspan = 0:dt_orbital:sim_duration*3600;
     fprintf('Main simulation will run from %.1f to %.1f seconds\n', tspan(1), tspan(end));
     
-    sat_data = precompute_satellite_data(master_sc, slave_sc, startTime, tspan, carrier_frequency);
+    sat_data = precompute_satellite_data(master_sc, slave_sc, start_time, tspan, carrier_frequency);
     
     % Use satellite data for LOS flags (already computed in sat_data)
     los_flags = sat_data.los_flags;
@@ -142,6 +142,7 @@ function [results] = simulate_ptp_orbital(cfg)
     times = nan(max_steps, 1);
     ptp_offset_log = nan(max_steps, 1);
     ptp_delay_log = nan(max_steps, 1);
+    ptp_rt_delay_log = nan(max_steps, 1);
     real_offset = nan(max_steps, 1);
     real_freq_shift = nan(max_steps, 1);
     forward_propagation_delays = nan(max_steps, 1);
@@ -217,11 +218,16 @@ function [results] = simulate_ptp_orbital(cfg)
                     temp_queue(1:queue_size-1, :) = msg_queue(1:queue_size-1, :);
                     msg_queue = temp_queue;
                 end
-                % Use interpolated delay for message timing
+                % Compute message timing
                 if j == 1
                     prop = forward_propagation_delays(i);
                 else
-                    prop = sat_data.forward_delay_interp(sim_time + (j-1)*min_msg_interval);
+                    if use_interpolation
+                        prop = sat_data.forward_delay_interp(sim_time + (j-1)*min_msg_interval);
+                    else
+                        current_dt = startTime + seconds(sim_time + (j-1)*min_msg_interval);
+                        prop = latency(master_sc, slave_sc, current_dt);
+                    end
                 end
                 msg_queue{queue_size, 1} = 'slave';
                 msg_queue{queue_size, 2} = master_msgs{j};
@@ -236,11 +242,17 @@ function [results] = simulate_ptp_orbital(cfg)
                     temp_queue(1:queue_size-1, :) = msg_queue(1:queue_size-1, :);
                     msg_queue = temp_queue;
                 end
-                % Use interpolated delay for message timing
+                % Compute message timing
                 if j == 1
                     prop = backward_propagation_delays(i);
                 else
-                    prop = sat_data.backward_delay_interp(sim_time + (j-1)*min_msg_interval);
+                    if use_interpolation
+                        prop = sat_data.backward_delay_interp(sim_time + (j-1)*min_msg_interval);
+                    else
+                        current_dt = startTime + seconds(sim_time + (j-1)*min_msg_interval);
+                        prop = latency(slave_sc, master_sc, current_dt);
+                    end
+                    
                 end
                 msg_queue{queue_size, 1} = 'master';
                 msg_queue{queue_size, 2} = slave_msgs{j};
@@ -271,6 +283,7 @@ function [results] = simulate_ptp_orbital(cfg)
             
             % Log PTP offset and delay
             [ptp_offset_log(i), ptp_delay_log(i)] = slave_node.get_ptp_estimate();
+            ptp_rt_delay_log(i) = slave_node.get_ptp_rt_delay();
 
             % Determine next simulation time
             if queue_size > 0
@@ -318,9 +331,11 @@ function [results] = simulate_ptp_orbital(cfg)
     
     % Prepare results
     results = struct();
+    
     results.times = times;
     results.ptp_offset = ptp_offset_log;
     results.ptp_delay = ptp_delay_log;
+    results.ptp_rt_delay = ptp_rt_delay_log;
     results.real_offset = real_offset;
     results.real_freq_shift = real_freq_shift;
     results.forward_propagation_delays = forward_propagation_delays;
@@ -328,13 +343,14 @@ function [results] = simulate_ptp_orbital(cfg)
     results.forward_doppler_shifts = forward_doppler_shifts;
     results.backward_doppler_shifts = backward_doppler_shifts;
     results.los_status = los_status;
-    results.los_flags = los_flags;
-    results.total_duration = total_duration;
-    results.tspan = tspan;
     results.master_sc = master_sc;
-    results.slave_Sc = slave_sc;
-    results.startTime = startTime;
-    results.los_intervals = valid_intervals;
-    results.sim_duration = sim_duration;
+    results.slave_sc = slave_sc;
     results.scenario = sc;
+    results.master_node = master_node;
+    results.slave_node = slave_node;
+    %results.los_intervals = valid_intervals;
+    %results.los_flags = los_flags;
+    %results.total_duration = total_duration;
+    %results.tspan = tspan;
+    %results.startTime = startTime;
 end

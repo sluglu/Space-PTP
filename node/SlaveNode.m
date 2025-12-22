@@ -33,6 +33,10 @@ classdef SlaveNode < PTPNode
             last_delay = obj.fsm.last_delay;
         end
 
+        function last_rt_delay = get_ptp_rt_delay(obj)
+            last_rt_delay = obj.fsm.last_rt_delay;
+        end
+
         function just_synced = just_synced(obj)
             just_synced = obj.fsm.just_synced;
         end

@@ -1,6 +1,6 @@
 clear; clc;
 
-cfg = exp_perfect_meta_ptp();
+cfg = exp_perfect_inter_shell();
 results = run_experiment(cfg);
 plot_experiment(cfg)
 
