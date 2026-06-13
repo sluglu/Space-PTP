@@ -15,8 +15,8 @@ master_clock = Clock(struct('f0', f0), t0);
 slave_clock  = Clock(struct('f0', f0, 'h', [8e-24, 1e-27, 1e-28, 4e-32, 2e-34]), t0);
 
 %% FSMs
-master_fsm = MasterFSM(sync_interval, true);
-slave_fsm  = SlaveFSM(true);
+master_fsm = PTPMasterFSM('slave', sync_interval, true);
+slave_fsm  = PTPSlaveFSM('master', true);
 
 %% Message queue
 queue = struct('to', {}, 'msg', {}, 'delivery_time', {});
@@ -47,10 +47,12 @@ while sim_time < sim_duration
     [slave_fsm, slave_msgs]   = slave_fsm.step(slave_clock.get_timestamp());
 
     for j = 1:length(master_msgs)
+        master_msgs{j}.from = 'master';
         queue(end+1) = struct('to', 'slave',  'msg', master_msgs{j}, ...
                               'delivery_time', sim_time + delay + drx + dtx*j);
     end
     for j = 1:length(slave_msgs)
+        slave_msgs{j}.from = 'slave';
         queue(end+1) = struct('to', 'master', 'msg', slave_msgs{j}, ...
                               'delivery_time', sim_time + delay + drx + dtx*j);
     end

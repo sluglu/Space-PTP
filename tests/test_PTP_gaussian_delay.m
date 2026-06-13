@@ -55,8 +55,8 @@ function off_error = run_ptp_with_gaussian_delay(asym_delay_std)
 
     master_clock = Clock(struct('f0', 125e6), t0);
     slave_clock  = Clock(struct('f0', 125e6), t0);
-    master_fsm   = MasterFSM(sync_interval, false);
-    slave_fsm    = SlaveFSM(false);
+    master_fsm = PTPMasterFSM('slave', sync_interval, false);
+    slave_fsm  = PTPSlaveFSM('master', false);
 
     queue = struct('to', {}, 'msg', {}, 'delivery_time', {});
 
@@ -80,10 +80,12 @@ function off_error = run_ptp_with_gaussian_delay(asym_delay_std)
         delay = base_delay + randn * asym_delay_std;
 
         for j = 1:length(master_msgs)
+            master_msgs{j}.from = 'master';
             queue(end+1) = struct('to', 'slave',  'msg', master_msgs{j}, ...
                                   'delivery_time', sim_time + delay + min_msg_gap*j);
         end
         for j = 1:length(slave_msgs)
+            slave_msgs{j}.from = 'slave';
             queue(end+1) = struct('to', 'master', 'msg', slave_msgs{j}, ...
                                   'delivery_time', sim_time + delay + min_msg_gap*j);
         end

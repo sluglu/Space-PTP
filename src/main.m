@@ -1,6 +1,6 @@
 clear; clc;
 
-cfg = exp_perfect_inter_shell();
+cfg = PTP_exp_perfect_inter_shell();
 
 results = run_experiment(cfg);
 save_results(results, cfg);
@@ -11,7 +11,7 @@ plot_experiment(results);
 %   show(sc)
 
 % Run multiple experiments:
-% configs = {'exp_rb_ocxo_same_plane', 'exp_rb_ocxo_cross_plane', 'exp_rb_ocxo_inter_shell'};
+% configs = {'PTP_exp_rb_ocxo_same_plane', 'PTP_exp_rb_ocxo_cross_plane', 'PTP_exp_rb_ocxo_inter_shell'};
 % parfor i = 1:numel(configs)
 %     c = feval(configs{i});
 %     save_results(run_experiment(c), c);

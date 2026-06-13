@@ -30,7 +30,7 @@ function plot_ptp_orbital(results)
     plot(results.times/60, results.fwd_delay, 'r', 'DisplayName', 'Forward Propagation Delay', 'LineWidth', 1.2);
     hold on;
     plot(results.times/60, results.bwd_delay, 'b', 'DisplayName', 'Backward Propagation Delay', 'LineWidth', 1.2);
-    plot(results.times/60, results.ptp_delay, 'g', 'DisplayName', 'PTP Delay Estimate', 'LineWidth', 1.5);
+    plot(results.times/60, results.delay_est, 'g', 'DisplayName', 'PTP Delay Estimate', 'LineWidth', 1.5);
     xlabel('Time [min]', 'FontSize', 10);
     xlim([0 sim_duration_min]);
     ylabel('Delay [s]', 'FontSize', 10);
@@ -54,7 +54,7 @@ function plot_ptp_orbital(results)
     subplot(4, 1, 3);
     plot(results.times/60, results.real_offset, 'r-', 'LineWidth', 1.5, 'DisplayName', 'True Offset');
     hold on;
-    plot(results.times/60, results.ptp_offset, 'b-', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
+    plot(results.times/60, results.offset_est, 'b-', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
     ylabel('Clock Offset [s]', 'FontSize', 10);
     xlabel('Time [min]', 'FontSize', 10);
     xlim([0 sim_duration_min]);
@@ -64,7 +64,7 @@ function plot_ptp_orbital(results)
 
     % --- Plot 4: PTP offset error ---
     subplot(4, 1, 4);
-    offset_error = results.ptp_offset - results.real_offset;
+    offset_error = results.offset_est - results.real_offset;
     plot(results.times/60, offset_error, 'g-', 'LineWidth', 1.5, 'DisplayName', 'PTP Offset Error');
     hold on;
 
