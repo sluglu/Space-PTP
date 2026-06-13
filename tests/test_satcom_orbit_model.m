@@ -38,33 +38,20 @@ los_flags = NaN(1, N);
 
 
 %% Simulate propagation delays, doppler and LOS
-
-% Create progress tracker object
-progress = ProgressTracker(100);
-
-% Start waitbar
+progress = ProgressTracker(N, 'test_satcom_orbit_model');
 progress.start();
 
 for k = 1:N
-    t = tspan(k);
-    t_abs  = startTime + seconds(t);
-    forward_delays(k) = latency(sat1, sat2, t_abs);
+    t_abs  = startTime + seconds(tspan(k));
+    forward_delays(k)  = latency(sat1, sat2, t_abs);
     backward_delays(k) = latency(sat2, sat1, t_abs);
-    forward_doppler(k) = dopplershift(sat1, sat2, t_abs);
+    forward_doppler(k)  = dopplershift(sat1, sat2, t_abs);
     backward_doppler(k) = dopplershift(sat2, sat1, t_abs);
-    if ~isnan(forward_delays(k))
-        los_flags(k) = 1;
-    end
-    if mod(k, ceil(N/100)) == 0
-        progress.update()
-    end
+    if ~isnan(forward_delays(k)); los_flags(k) = 1; end
+    progress.update();
 end
 
-% Clean up
 progress.finish();
-
-elapsed_time = toc;
-fprintf('Simulation completed in %.2f seconds\n', elapsed_time);
 
 
 %% Plot

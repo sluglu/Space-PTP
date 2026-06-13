@@ -6,27 +6,24 @@ sim_duration = 3600;
 
 %% Oscillator Parameters
 % 1. OCXO (100 MHz OX-249)
-slave_f0 = 100e6;
-ocxo_params = struct(...
-    'delta_f0', (rand() * 2 * 50) - 50, ...
-    'alpha', (rand() * 2 * 1.58e-6) - 1.58e-6, ...
-    'power_law_coeffs', [0, 4.62e-23, 1.58e-25, 0, 1.0e-32] ...
-);
+ocxo = struct( ...
+    'f0',      100e6, ...
+    'delta_f0', (rand()*2 - 1) * 50, ...
+    'alpha',    (rand()*2 - 1) * 1.58e-6, ...
+    'h',        [0, 4.62e-23, 1.58e-25, 0, 1.0e-32]);
 
-% 2. Rubidium Atomic Clock (10 MHz CSAC-SA45)
-master_f0 = 10e6;
-rubidium_params = struct( ...
-    'delta_f0', (rand() * 2 * 5e-4) - 5e-4, ...
-    'alpha', (rand() * 2 * 3.17e-9) - 3.17e-9, ...
-    'power_law_coeffs', [0, 0, 1.8e-19, 0, 2.0e-28] ...
-);
+% 2. Rubidium CSAC (10 MHz SA45)
+csac = struct( ...
+    'f0',      10e6, ...
+    'delta_f0', (rand()*2 - 1) * 5e-4, ...
+    'alpha',    (rand()*2 - 1) * 3.17e-9, ...
+    'h',        [0, 0, 1.8e-19, 0, 2.0e-28]);
 
-%% Create Clocks with Power Law Noise
-master_noise_profile = NoiseProfile(rubidium_params);
-master_clock = WRClock(master_f0, 0, master_noise_profile);
-
-slave_noise_profile = NoiseProfile(ocxo_params);
-slave_clock = WRClock(slave_f0, 0, slave_noise_profile);
+%% Create Clocks
+master_clock = Clock(csac,  0);
+slave_clock  = Clock(ocxo,  0);
+master_f0 = csac.f0;
+slave_f0  = ocxo.f0;
 
 % Pre-allocate arrays
 N = ceil(sim_duration / dt);
@@ -36,30 +33,19 @@ slave_freq = zeros(1, N);
 
 %% Run Simulation
 
-% Create progress tracker object
-progress = ProgressTracker(100);
-
-% Start waitbar
-progress.start();
-
 fprintf('Simulating %d samples over %.1f hours...\n', N, sim_duration/3600);
+progress = ProgressTracker(N, 'test_clock_model');
+progress.start();
 
 for i = 1:N
     master_freq(i) = master_clock.f;
-    slave_freq(i) = slave_clock.f;
+    slave_freq(i)  = slave_clock.f;
     master_clock = master_clock.advance(dt);
-    slave_clock = slave_clock.advance(dt);
-    
-    if mod(i, ceil(N/100)) == 0
-        progress.update()
-    end
+    slave_clock  = slave_clock.advance(dt);
+    progress.update();
 end
 
-% Clean up
 progress.finish();
-
-elapsed_time = toc;
-fprintf('Simulation completed in %.2f seconds\n', elapsed_time);
 
 %% Analysis and Plotting
 figure('Position', [100, 100, 1200, 800]); % Adjusted for 3x2 layout
@@ -91,8 +77,8 @@ grid on;
 subplot(3,2,3);
 % Calculate theoretical ADEV for background plotting
 tau_values_th = logspace(-4, 4, 50);
-allan_dev_master_th = arrayfun(@(t) allan_deviation_estimate(t, master_noise_profile.power_law_coeffs), tau_values_th);
-allan_dev_slave_th = arrayfun(@(t) allan_deviation_estimate(t, slave_noise_profile.power_law_coeffs), tau_values_th);
+allan_dev_master_th = arrayfun(@(t) allan_deviation_estimate(t, csac.h), tau_values_th);
+allan_dev_slave_th = arrayfun(@(t) allan_deviation_estimate(t, ocxo.h), tau_values_th);
 
 % Calculate empirical ADEV from simulation data
 tau_values_for_emp = logspace(-2, log10(sim_duration/10), 20);
@@ -117,10 +103,10 @@ grid on;
 subplot(3,2,4);
 % Calculate theoretical Phase Noise for background plotting
 f_axis_th = logspace(-4, 4, 200);
-h_slave = slave_noise_profile.power_law_coeffs;
+h_slave = ocxo.h;
 sy_f_slave = h_slave(1)*f_axis_th.^(-2) + h_slave(2)*f_axis_th.^(-1) + h_slave(3) + h_slave(4)*f_axis_th.^1 + h_slave(5)*f_axis_th.^2;
 L_f_slave_th = 10*log10((slave_f0^2 ./ (2*f_axis_th.^2)) .* sy_f_slave);
-h_master = master_noise_profile.power_law_coeffs;
+h_master = csac.h;
 sy_f_master = h_master(1)*f_axis_th.^(-2) + h_master(2)*f_axis_th.^(-1) + h_master(3) + h_master(4)*f_axis_th.^1 + h_master(5)*f_axis_th.^2;
 L_f_master_th = 10*log10((master_f0^2 ./ (2*f_axis_th.^2)) .* sy_f_master);
 

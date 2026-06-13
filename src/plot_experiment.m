@@ -1,117 +1,88 @@
-function plot_experiment(cfg)    
-    exp_name = strrep(cfg.exp.name,' ','_');
-    
-    filepath = fullfile( ...
-        cfg.exp.root, sprintf("%s.mat", exp_name));
-    
-    data = load(filepath);
-    plot_ptp_orbital(data)
+function plot_experiment(results_or_cfg)
+% PLOT_EXPERIMENT  Plot PTP simulation results.
+%   plot_experiment(results)  — pass results struct directly
+%   plot_experiment(cfg)      — load results from disk using cfg.exp
+
+    if isfield(results_or_cfg, 'meta')
+        results = results_or_cfg;
+    else
+        cfg      = results_or_cfg;
+        filepath = fullfile(cfg.exp.root, sprintf('%s.mat', cfg.exp.name));
+        results  = load(filepath);
+    end
+
+    plot_ptp_orbital(results);
 end
 
 
 function plot_ptp_orbital(results)
-    
+
     figure('Position', [100, 0, 1400, 1000]);
-    
-    % --- Main Title ---
-    name = results.meta.exp_name; 
-    
-    % Create main title with scenario name
-    main_title = sgtitle(sprintf('PTP Orbital Simulation Results - %s ', name), ...
-            'FontSize', 16, 'FontWeight', 'bold', 'Interpreter', 'none');
 
-    
-    % % Format parameter strings with Keplerian elements
-    % rE = 6371e3;
+    name = results.meta.exp_name;
+    sgtitle(sprintf('PTP Orbital Simulation Results - %s', name), ...
+        'FontSize', 16, 'FontWeight', 'bold', 'Interpreter', 'none');
 
-    % % Extract orbital parameters
-    % master_sc = results.meta.cfg.scenario.master_sc;
-    % slave_sc = results.meta.cfg.scenario.slave_sc;
-    % a1 = master_sc{1};    e1 = master_sc{2};    i1 = master_sc{3};
-    % raan1 = master_sc{4}; argp1 = master_sc{5}; ta1 = master_sc{6};
-    % a2 = slave_sc{1};    e2 = slave_sc{2};    i2 = slave_sc{3};
-    % raan2 = slave_sc{4}; argp2 = slave_sc{5}; ta2 = slave_sc{6};
+    sim_duration_min = results.meta.cfg.sim.sim_duration * 60;
 
-    % % Create subtitle with orbital parameters in a more compact format
-    % subtitle_str = sprintf(['master: a=%.0fkm, e=%.4f, i=%.1f°, RAAN=%.1f°, ω=%.1f°, TA=%.1f°  |  ' ...
-    %                        'slave: a=%.0fkm, e=%.4f, i=%.1f°, RAAN=%.1f°, ω=%.1f°, TA=%.1f°'], ...
-    %                         a1*1e-3, e1, i1, raan1, argp1, ta1, ...
-    %                         a2*1e-3, e2, i2, raan2, argp2, ta2);
-    
-    % % Add subtitle text positioned just below the title
-    % annotation('textbox', [0.1, 0.913, 0.8, 0.03], ...
-    %            'String', subtitle_str, ...
-    %            'EdgeColor', 'none', ...
-    %            'HorizontalAlignment', 'center', ...
-    %            'FontSize', 9, ...
-    %            'FontWeight', 'normal', ...
-    %            'VerticalAlignment', 'middle', ...
-    %            'Interpreter', 'none', ...
-    %            'FitBoxToText', 'off');
-
-    % --- Plot 1: Propagation delays and PTP delay estimates ---
+    % --- Plot 1: Propagation delays and PTP delay estimate ---
     subplot(4, 1, 1);
-    subplot(4, 1, 1);
-    plot(results.times/60, results.forward_propagation_delays, 'r', 'DisplayName', 'Forward Propagation Delay', 'LineWidth', 1.2);
+    plot(results.times/60, results.fwd_delay, 'r', 'DisplayName', 'Forward Propagation Delay', 'LineWidth', 1.2);
     hold on;
-    plot(results.times/60, results.backward_propagation_delays, 'b', 'DisplayName', 'Backward Propagation Delay', 'LineWidth', 1.2);
+    plot(results.times/60, results.bwd_delay, 'b', 'DisplayName', 'Backward Propagation Delay', 'LineWidth', 1.2);
     plot(results.times/60, results.ptp_delay, 'g', 'DisplayName', 'PTP Delay Estimate', 'LineWidth', 1.5);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.meta.cfg.sim.sim_duration*60]);
+    xlim([0 sim_duration_min]);
     ylabel('Delay [s]', 'FontSize', 10);
     title('Propagation Delays and PTP Delay Estimate', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
     grid on;
-    
+
     % --- Plot 2: Doppler shifts ---
     subplot(4, 1, 2);
-    plot(results.times/60, results.forward_doppler_shifts, 'r', 'DisplayName', 'Forward Doppler Shift', 'LineWidth', 1.2);
+    plot(results.times/60, results.fwd_doppler, 'r', 'DisplayName', 'Forward Doppler Shift', 'LineWidth', 1.2);
     hold on;
-    plot(results.times/60, results.backward_doppler_shifts, 'b', 'DisplayName', 'Backward Doppler Shift', 'LineWidth', 1.2);
+    plot(results.times/60, results.bwd_doppler, 'b', 'DisplayName', 'Backward Doppler Shift', 'LineWidth', 1.2);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.meta.cfg.sim.sim_duration*60]);
+    xlim([0 sim_duration_min]);
     ylabel('Doppler Shift [Hz]', 'FontSize', 10);
     title('Doppler Shifts', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
     grid on;
-    
-    % --- Plot 3: Clock synchronization performance ---
+
+    % --- Plot 3: Clock offset and PTP estimate ---
     subplot(4, 1, 3);
-    hold on;
     plot(results.times/60, results.real_offset, 'r-', 'LineWidth', 1.5, 'DisplayName', 'True Offset');
-    plot(results.times/60, results.ptp_offset, '-b', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
+    hold on;
+    plot(results.times/60, results.ptp_offset, 'b-', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
     ylabel('Clock Offset [s]', 'FontSize', 10);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.meta.cfg.sim.sim_duration*60]);
+    xlim([0 sim_duration_min]);
     title('Clock Offset and PTP Offset Estimate', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
     grid on;
-    hold off;
 
     % --- Plot 4: PTP offset error ---
     subplot(4, 1, 4);
-    hold on;
     offset_error = results.ptp_offset - results.real_offset;
-    plot(results.times/60, offset_error, '-g', 'LineWidth', 1.5, 'DisplayName', 'PTP Offset Error');
-    
-    % Add statistics text
+    plot(results.times/60, offset_error, 'g-', 'LineWidth', 1.5, 'DisplayName', 'PTP Offset Error');
+    hold on;
+
     valid_idx = ~isnan(offset_error);
     if any(valid_idx)
         mean_err = mean(offset_error(valid_idx));
-        std_err = std(offset_error(valid_idx));
-        max_err = max(abs(offset_error(valid_idx)));
-        
+        std_err  = std(offset_error(valid_idx));
+        max_err  = max(abs(offset_error(valid_idx)));
         stats_str = sprintf('Mean: %.2e s | Std: %.2e s | Max: %.2e s', mean_err, std_err, max_err);
         text(0.02, 0.95, stats_str, 'Units', 'normalized', ...
              'FontSize', 9, 'BackgroundColor', 'white', ...
              'EdgeColor', 'black', 'VerticalAlignment', 'top');
     end
-    
+
     ylabel('Offset Error [s]', 'FontSize', 10);
     xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 results.meta.cfg.sim.sim_duration*60]);
+    xlim([0 sim_duration_min]);
     title('PTP Clock Offset Error', 'FontSize', 11, 'FontWeight', 'bold');
     grid on;
-    hold off;
-    
+
 end
