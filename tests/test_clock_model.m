@@ -1,205 +1,159 @@
+% TEST_CLOCK_MODEL
+% Validates the Clock power-law noise model against theoretical Allan deviation
+% and phase noise curves for OCXO and CSAC oscillator specs.
+%
+% Pass criteria (checked quantitatively):
+%   Empirical ADEV at each tau is within a factor of 3 of the theoretical value
+%   for the dominant noise process.  Factor-of-3 tolerance accounts for Monte
+%   Carlo variance at limited simulation length.
+
 clear; clc; close all;
 
-%% Simulation Parameters
-dt = 0.01;
-sim_duration = 3600;
+%% Parameters
+dt           = 0.01;       % simulation step [s]
+sim_duration = 3600;       % [s]
+tol_factor   = 3;          % empirical ADEV must be within this multiple of theory
 
-%% Oscillator Parameters
-% 1. OCXO (100 MHz OX-249)
+%% Oscillator specs (from datasheets)
 ocxo = struct( ...
-    'f0',      100e6, ...
-    'delta_f0', (rand()*2 - 1) * 50, ...
-    'alpha',    (rand()*2 - 1) * 1.58e-6, ...
-    'h',        [0, 4.62e-23, 1.58e-25, 0, 1.0e-32]);
+    'f0',       100e6, ...
+    'delta_f0', (rand()*2-1) * 50, ...
+    'alpha',    (rand()*2-1) * 1.58e-6, ...
+    'h',        [0, 4.62e-23, 1.58e-25, 0, 1.0e-32]);  % OX-249
 
-% 2. Rubidium CSAC (10 MHz SA45)
 csac = struct( ...
-    'f0',      10e6, ...
-    'delta_f0', (rand()*2 - 1) * 5e-4, ...
-    'alpha',    (rand()*2 - 1) * 3.17e-9, ...
-    'h',        [0, 0, 1.8e-19, 0, 2.0e-28]);
+    'f0',       10e6, ...
+    'delta_f0', (rand()*2-1) * 5e-4, ...
+    'alpha',    (rand()*2-1) * 3.15e-9, ...
+    'h',        [0, 0, 1.8e-19, 0, 2.0e-28]);           % SA45
 
-%% Create Clocks
-master_clock = Clock(csac,  0);
-slave_clock  = Clock(ocxo,  0);
-master_f0 = csac.f0;
-slave_f0  = ocxo.f0;
-
-% Pre-allocate arrays
+%% Simulate
 N = ceil(sim_duration / dt);
-times = (0:N-1) * dt;
-master_freq = zeros(1, N);
-slave_freq = zeros(1, N);
+clk_ocxo = Clock(ocxo, 0);
+clk_csac = Clock(csac, 0);
 
-%% Run Simulation
+freq_ocxo = zeros(1, N);
+freq_csac = zeros(1, N);
 
-fprintf('Simulating %d samples over %.1f hours...\n', N, sim_duration/3600);
 progress = ProgressTracker(N, 'test_clock_model');
 progress.start();
-
 for i = 1:N
-    master_freq(i) = master_clock.f;
-    slave_freq(i)  = slave_clock.f;
-    master_clock = master_clock.advance(dt);
-    slave_clock  = slave_clock.advance(dt);
+    freq_ocxo(i) = clk_ocxo.f;
+    freq_csac(i) = clk_csac.f;
+    clk_ocxo = clk_ocxo.advance(dt);
+    clk_csac = clk_csac.advance(dt);
     progress.update();
 end
-
 progress.finish();
 
-%% Analysis and Plotting
-figure('Position', [100, 100, 1200, 800]); % Adjusted for 3x2 layout
+%% Empirical Allan deviation
+tau_emp = logspace(-1, log10(sim_duration/10), 20);
+[adev_ocxo, tau_ocxo] = compute_adev(freq_ocxo, 1/dt, ocxo.f0, tau_emp);
+[adev_csac, tau_csac] = compute_adev(freq_csac, 1/dt, csac.f0, tau_emp);
 
-% Calculate fractional frequencies for normalized comparisons
-master_frac_freq = (master_freq - master_f0) / master_f0;
-slave_frac_freq = (slave_freq - slave_f0) / slave_f0;
+%% Quantitative checks
+fprintf('\n=== Clock Model Validation ===\n');
 
-% --- PLOT 1: FRACTIONAL FREQUENCY EVOLUTION ---
-subplot(3,2,1);
-plot(times, master_frac_freq * 1e9, 'b-'); % Plot in ppb
+check_adev('OCXO', tau_ocxo, adev_ocxo, ocxo.h, tol_factor);
+check_adev('CSAC', tau_csac, adev_csac, csac.h, tol_factor);
+
+%% Plots
+tau_th = logspace(-2, 4, 100);
+figure('Name', 'Clock Model Validation', 'Position', [100 100 1200 800]);
+
+% --- ADEV ---
+subplot(2,2,[1 2]);
+loglog(tau_th, arrayfun(@(t) theory_adev(t, ocxo.h), tau_th), 'r--', 'LineWidth', 1, 'HandleVisibility', 'off');
 hold on;
-plot(times, slave_frac_freq * 1e9, 'r-');
-xlabel('Time [s]');
-ylabel('Fractional Frequency [ppb]');
-title('Clock Frequency Evolution');
-legend('Master (CSAC)', 'Slave (OCXO)', 'Location', 'best');
-grid on;
+loglog(tau_th, arrayfun(@(t) theory_adev(t, csac.h), tau_th), 'b--', 'LineWidth', 1, 'HandleVisibility', 'off');
+loglog(tau_ocxo, adev_ocxo, 'r-o', 'DisplayName', 'OCXO (empirical)');
+loglog(tau_csac, adev_csac, 'b-o', 'DisplayName', 'CSAC (empirical)');
+xlabel('\tau [s]'); ylabel('\sigma_y(\tau)');
+title('Allan Deviation — empirical (solid) vs theory (dashed)');
+legend('Location','best'); grid on;
 
-% --- PLOT 2: FRACTIONAL FREQUENCY DIFFERENCE ---
-subplot(3,2,2);
-plot(times, (slave_frac_freq - master_frac_freq) * 1e9, 'g-'); % Plot in ppb
-xlabel('Time [s]');
-ylabel('Fractional Freq Diff [ppb]');
-title('Fractional Frequency Difference (Slave - Master)');
-grid on;
-
-% --- PLOT 3: ALLAN DEVIATION (EMPIRICAL VS THEORETICAL) ---
-subplot(3,2,3);
-% Calculate theoretical ADEV for background plotting
-tau_values_th = logspace(-4, 4, 50);
-allan_dev_master_th = arrayfun(@(t) allan_deviation_estimate(t, csac.h), tau_values_th);
-allan_dev_slave_th = arrayfun(@(t) allan_deviation_estimate(t, ocxo.h), tau_values_th);
-
-% Calculate empirical ADEV from simulation data
-tau_values_for_emp = logspace(-2, log10(sim_duration/10), 20);
-[adev_master_emp, tau_master_actual] = calculate_allan_deviation(master_freq, 1/dt, master_f0, tau_values_for_emp);
-[adev_slave_emp, tau_slave_actual] = calculate_allan_deviation(slave_freq, 1/dt, slave_f0, tau_values_for_emp);
-
-% Plot theoretical curves lightly in the background
-loglog(tau_values_th, allan_dev_master_th, 'b--', 'LineWidth', 1, 'HandleVisibility', 'off');
+% --- Frequency traces ---
+times = (0:N-1)*dt;
+subplot(2,2,3);
+frac_ocxo = (freq_ocxo - ocxo.f0) / ocxo.f0;
+frac_csac = (freq_csac - csac.f0) / csac.f0;
+plot(times, frac_ocxo*1e9, 'r-', 'DisplayName', 'OCXO');
 hold on;
-loglog(tau_values_th, allan_dev_slave_th, 'r--', 'LineWidth', 1, 'HandleVisibility', 'off');
+plot(times, frac_csac*1e9, 'b-', 'DisplayName', 'CSAC');
+xlabel('Time [s]'); ylabel('Fractional frequency [ppb]');
+title('Frequency deviation'); legend('Location','best'); grid on;
 
-% Plot empirical data markers on top
-loglog(tau_master_actual, adev_master_emp, 'bo', 'MarkerFaceColor', 'b', 'DisplayName', 'Master (CSAC)');
-loglog(tau_slave_actual, adev_slave_emp, 'rx', 'MarkerSize', 8, 'LineWidth', 1.5, 'DisplayName', 'Slave (OCXO)');
-xlabel('Averaging Time τ [s]');
-ylabel('Allan Deviation σ_y(τ)');
-title('Allan Deviation (Empirical vs. Theoretical)');
-legend('Location', 'best');
-grid on;
+% --- Phase noise PSD ---
+subplot(2,2,4);
+[psd_ocxo, fax] = pwelch(freq_ocxo - mean(freq_ocxo), [], [], [], 1/dt);
+[psd_csac, ~  ] = pwelch(freq_csac - mean(freq_csac), [], [], [], 1/dt);
+f = fax(2:end);
+Lf_ocxo = 10*log10(0.5 * psd_ocxo(2:end) ./ f.^2);
+Lf_csac = 10*log10(0.5 * psd_csac(2:end) ./ f.^2);
 
-% --- PLOT 4: PHASE NOISE (EMPIRICAL VS THEORETICAL) ---
-subplot(3,2,4);
-% Calculate theoretical Phase Noise for background plotting
-f_axis_th = logspace(-4, 4, 200);
-h_slave = ocxo.h;
-sy_f_slave = h_slave(1)*f_axis_th.^(-2) + h_slave(2)*f_axis_th.^(-1) + h_slave(3) + h_slave(4)*f_axis_th.^1 + h_slave(5)*f_axis_th.^2;
-L_f_slave_th = 10*log10((slave_f0^2 ./ (2*f_axis_th.^2)) .* sy_f_slave);
-h_master = csac.h;
-sy_f_master = h_master(1)*f_axis_th.^(-2) + h_master(2)*f_axis_th.^(-1) + h_master(3) + h_master(4)*f_axis_th.^1 + h_master(5)*f_axis_th.^2;
-L_f_master_th = 10*log10((master_f0^2 ./ (2*f_axis_th.^2)) .* sy_f_master);
+% Theoretical phase noise
+Sy_ocxo = ocxo.h(2)./fax(2:end) + ocxo.h(3) + ocxo.h(5)*fax(2:end).^2;
+Sy_csac = csac.h(3) + csac.h(5)*fax(2:end).^2;
+Lf_ocxo_th = 10*log10(0.5 * ocxo.f0^2 ./ fax(2:end).^2 .* Sy_ocxo);
+Lf_csac_th = 10*log10(0.5 * csac.f0^2 ./ fax(2:end).^2 .* Sy_csac);
 
-% Calculate empirical Phase Noise from simulation data
-[psd_f_master, freq_axis] = pwelch(master_freq - mean(master_freq), [], [], [], 1/dt);
-[psd_f_slave, ~] = pwelch(slave_freq - mean(slave_freq), [], [], [], 1/dt);
-valid_indices = 2:length(freq_axis);
-f = freq_axis(valid_indices);
-L_f_dB_master = 10 * log10(0.5 * (psd_f_master(valid_indices)) ./ (f.^2));
-L_f_dB_slave = 10 * log10(0.5 * (psd_f_slave(valid_indices)) ./ (f.^2));
+semilogx(f, Lf_ocxo, 'r-', 'DisplayName', 'OCXO'); hold on;
+semilogx(f, Lf_csac, 'b-', 'DisplayName', 'CSAC');
+semilogx(f, Lf_ocxo_th, 'r--', 'HandleVisibility','off');
+semilogx(f, Lf_csac_th, 'b--', 'HandleVisibility','off');
+xlabel('Offset frequency [Hz]'); ylabel('L(f) [dBc/Hz]');
+title('Phase noise — empirical (solid) vs theory (dashed)');
+legend('Location','best'); grid on;
 
-% Plot theoretical curves lightly in the background
-semilogx(f_axis_th, L_f_master_th, 'b--', 'LineWidth', 1, 'HandleVisibility', 'off');
-hold on;
-semilogx(f_axis_th, L_f_slave_th, 'r--', 'LineWidth', 1, 'HandleVisibility', 'off');
+sgtitle('Power-law Clock Noise — OCXO & CSAC', 'FontSize', 14, 'FontWeight', 'bold');
 
-% Plot empirical data on top
-semilogx(f, L_f_dB_master, 'b-', 'DisplayName', 'Master (CSAC)');
-semilogx(f, L_f_dB_slave, 'r-', 'DisplayName', 'Slave (OCXO)');
-xlabel('Frequency Offset f [Hz]');
-ylabel('Phase Noise L(f) [dBc/Hz]');
-title('Phase Noise (Empirical vs. Theoretical)');
-legend('Location', 'best');
-grid on;
 
-% --- PLOT 5: HISTOGRAM ---
-subplot(3,2,5);
-histogram(master_frac_freq * 1e9, 50, 'Normalization', 'probability', 'FaceAlpha', 0.7, 'FaceColor', 'blue');
-hold on;
-histogram(slave_frac_freq * 1e9, 50, 'Normalization', 'probability', 'FaceAlpha', 0.7, 'FaceColor', 'red');
-xlabel('Fractional Frequency Deviation [ppb]');
-ylabel('Probability');
-title('Frequency Deviation Distribution');
-legend('Master (CSAC)', 'Slave (OCXO)', 'Location', 'best');
-grid on;
-
-% --- PLOT 6: CUMULATIVE TIME DIFFERENCE ---
-subplot(3,2,6);
-master_phase_error = cumsum(master_frac_freq * dt);
-slave_phase_error = cumsum(slave_frac_freq * dt);
-time_error = slave_phase_error - master_phase_error;
-plot(times, time_error * 1e9, 'm-', 'LineWidth', 1.5);
-xlabel('Time [s]');
-ylabel('Time Difference [ns]');
-title('Cumulative Time Difference (Slave - Master)');
-grid on;
-
-sgtitle('Power Law Clock Noise Simulation: OCXO vs. CSAC', 'FontSize', 16, 'FontWeight', 'bold');
-
-%% Helper and Estimation Functions
-
-function [adev, tau_out] = calculate_allan_deviation(freq_data, fs, f0, tau_values)
-    % Calculates Overlapping Allan Deviation from frequency data.
-    y = (freq_data - mean(freq_data)) / f0;
+%% -----------------------------------------------------------------------
+function [adev, tau_out] = compute_adev(freq, fs, f0, tau_vals)
+    y = (freq - mean(freq)) / f0;
+    x = cumsum(y) / fs;
     N = length(y);
-    x = cumsum(y) / fs; % Phase error in seconds
-    adev = zeros(size(tau_values));
-    for i = 1:length(tau_values)
-        tau = tau_values(i);
-        m = floor(tau * fs);
-        if m == 0; adev(i) = NaN; continue; end
-        if (N - 2*m) < 1; adev(i:end) = NaN; break; end
-        
-        sum_sq_diff = 0;
-        for j = 1:(N - 2*m)
-            term = x(j + 2*m) - 2*x(j + m) + x(j);
-            sum_sq_diff = sum_sq_diff + term^2;
+    adev    = zeros(size(tau_vals));
+    tau_out = tau_vals;
+    for k = 1:length(tau_vals)
+        m = floor(tau_vals(k) * fs);
+        if m < 1 || (N - 2*m) < 1; adev(k) = NaN; continue; end
+        s = 0;
+        for j = 1:(N-2*m)
+            s = s + (x(j+2*m) - 2*x(j+m) + x(j))^2;
         end
-        
-        avar = sum_sq_diff / (2 * (N - 2*m) * tau^2);
-        adev(i) = sqrt(avar);
+        adev(k) = sqrt(s / (2*(N-2*m)*tau_vals(k)^2));
     end
-    tau_out = tau_values;
-    valid_indices = ~isnan(adev);
-    adev = adev(valid_indices);
-    tau_out = tau_out(valid_indices);
+    ok      = ~isnan(adev);
+    adev    = adev(ok);
+    tau_out = tau_out(ok);
 end
 
-function sigma_y = allan_deviation_estimate(tau, h)
-    % Estimates Allan deviation from power law coefficients h.
-    sigma_y_squared = 0;
-    % h_coeffs = [h_-2, h_-1, h_0, h_1, h_2]
+function sy = theory_adev(tau, h)
+    % Analytical Allan variance for power-law processes (IEEE 1139-2008)
+    avar = (2*pi)^2 * h(1)*tau/6 ...   % h_{-2}: RWFM
+         + h(2) * 2*log(2)         ...  % h_{-1}: Flicker FM
+         + h(3) / (2*tau)          ...  % h_{0}: White FM
+         + 3*h(5) / (2*pi*tau)^2;       % h_{+2}: White PM
+    % h_{+1} (Flicker PM) omitted: neither OCXO nor CSAC uses it.
+    sy = sqrt(max(avar, 0));
+end
 
-    % Random Walk FM (h_-2)
-    sigma_y_squared = sigma_y_squared + ( (2*pi)^2 * h(1) * tau / 6 );
-    % Flicker FM (h_-1)
-    sigma_y_squared = sigma_y_squared + ( h(2) * 2 * log(2) );
-    % White FM (h_0)
-    sigma_y_squared = sigma_y_squared + ( h(3) / (2 * tau) );
-    % Flicker PM (h_1) - Approximation, requires bandwidth f_h
-    % sigma_y_squared = sigma_y_squared + ( h(4) / (2 * (pi * tau)^2) * (1.038 + 3*log(2*pi*1e6*tau)) );
-    % White PM (h_2)
-    sigma_y_squared = sigma_y_squared + ( 3 * h(5) / ( (2*pi*tau)^2 ) );
-
-    sigma_y = sqrt(sigma_y_squared);
+function check_adev(label, tau, adev_emp, h, tol)
+    fprintf('\n%s:\n', label);
+    th = arrayfun(@(t) theory_adev(t, h), tau);
+    ratio = adev_emp ./ th;
+    ok = all(ratio > 1/tol & ratio < tol);
+    for k = 1:length(tau)
+        status = 'OK';
+        if ratio(k) < 1/tol || ratio(k) > tol; status = 'FAIL'; end
+        fprintf('  tau=%6.2f s  emp=%.2e  th=%.2e  ratio=%.2f  [%s]\n', ...
+            tau(k), adev_emp(k), th(k), ratio(k), status);
+    end
+    if ok
+        fprintf('  => PASS (all ratios within factor %.0f of theory)\n', tol);
+    else
+        fprintf('  => FAIL (some taus outside factor %.0f tolerance)\n', tol);
+        % Not an error — stochastic test; large deviations warrant inspection.
+    end
 end

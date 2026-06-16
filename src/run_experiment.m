@@ -66,6 +66,8 @@ function results = simulate(cfg)
                 clocks{k} = clocks{k}.advance(actual_dt);
                 ts = clocks{k}.get_timestamp();
                 [fsms{k}, msgs] = fsms{k}.step(ts);
+                % Apply fractional frequency correction from FSM servo
+                clocks{k}.servo_y = fsms{k}.servo_y;
                 for j = 1:length(msgs)
                     msgs{j}.from = ids{k};
                 end

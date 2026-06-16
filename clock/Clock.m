@@ -10,9 +10,7 @@ classdef Clock
 %
 % Power-law noise references:
 %   IEEE Std 1139-2008; Kasdin & Walter (1992).
-%   NOTE: h_-1 (Flicker FM) and h_1 (Flicker PM) use a moving-average
-%   approximation.  A proper Kasdin-Walter FIR implementation would be
-%   more accurate for those two processes.
+%   h_{-1} (Flicker FM) and h_{+1} (Flicker PM) use the Kasdin-Walter FIR method.
 
     properties
         f0      % Nominal frequency [Hz]
@@ -25,13 +23,20 @@ classdef Clock
         alpha                = 0
         h                    = zeros(1,5)
         timestamp_resolution = 0
+
+        % Fractional frequency correction applied by external servo [dimensionless, y = df/f0]
+        % Set by the FSM each step; enters advance() as servo_y * f0 [Hz].
+        servo_y = 0
     end
 
     properties (Access = private)
-        % IIR filter states for colored noise (h_-2, h_-1, h_1)
-        fs_neg2
-        fs_neg1
-        fs_pos1
+        rw_state      % scalar accumulator for h_{-2} random walk FM
+
+        kw_buf_neg1   % noise history buffer for h_{-1} (flicker FM)
+        kw_c_neg1     % Kasdin-Walter FIR coefficients for h_{-1}
+
+        kw_buf_pos1   % noise history buffer for h_{+1} (flicker PM)
+        kw_c_pos1     % Kasdin-Walter FIR coefficients for h_{+1}
     end
 
     methods
@@ -49,17 +54,19 @@ classdef Clock
             obj.phi = 0;
             obj.f   = obj.f0 + obj.delta_f0;
             if t0 ~= 0
-                obj = obj.advance(t0);
+                obj.phi = 2*pi * obj.f * t0;
             end
         end
 
         function obj = advance(obj, dt)
             if dt <= 0; return; end
             obj.t_accum = obj.t_accum + dt;
+            f_old       = obj.f;
             [dy, obj]   = obj.generate_noise(dt);
-            df    = obj.delta_f0 + obj.alpha * obj.t_accum + dy * obj.f0;
+            df    = obj.delta_f0 + obj.servo_y * obj.f0 + obj.alpha * obj.t_accum + dy * obj.f0;
             obj.f = obj.f0 + df;
-            obj.phi = obj.phi + 2*pi*obj.f*dt;
+            % Trapezoid integration avoids bias from drift
+            obj.phi = obj.phi + 2*pi * ((f_old + obj.f) / 2) * dt;
         end
 
         function ts = get_time(obj)
@@ -75,11 +82,12 @@ classdef Clock
 
         function obj = reset(obj, t0)
             obj = obj.init_filters();
-            obj.t_accum = 0;
-            obj.phi     = 0;
-            obj.f       = obj.f0 + obj.delta_f0;
+            obj.t_accum  = 0;
+            obj.phi      = 0;
+            obj.f        = obj.f0 + obj.delta_f0;
+            obj.servo_y = 0;
             if nargin > 1 && t0 ~= 0
-                obj = obj.advance(t0);
+                obj.phi = 2*pi * obj.f * t0;
             end
         end
     end
@@ -88,10 +96,27 @@ classdef Clock
     methods (Access = private)
 
         function obj = init_filters(obj)
-            n = 20;
-            obj.fs_neg2 = zeros(n, 1);
-            obj.fs_neg1 = zeros(n, 1);
-            obj.fs_pos1 = zeros(n, 1);
+            obj.rw_state = 0;
+
+            % Kasdin-Walter FIR for h_{-1} (flicker FM, 1/f PSD)
+            % Coefficients: d_0=1, d_k = d_{k-1}*(k-1.5)/(k-1)  [half-order integrator]
+            N = 64;
+            c = ones(N, 1);
+            for k = 2:N
+                c(k) = c(k-1) * (k - 1.5) / (k - 1);
+            end
+            obj.kw_c_neg1   = c;
+            obj.kw_buf_neg1 = zeros(N, 1);
+
+            % Kasdin-Walter FIR for h_{+1} (flicker PM, f PSD)
+            % Coefficients: d_0=1, d_k = d_{k-1}*(k-2.5)/(k-1)  [half-order differentiator]
+            M = 32;
+            c = ones(M, 1);
+            for k = 2:M
+                c(k) = c(k-1) * (k - 2.5) / (k - 1);
+            end
+            obj.kw_c_pos1   = c;
+            obj.kw_buf_pos1 = zeros(M, 1);
         end
 
         function [dy, obj] = generate_noise(obj, dt)
@@ -102,47 +127,40 @@ classdef Clock
                 return;
             end
 
-            % h_-2: Random Walk FM  (integrated white noise → frequency random walk)
+            % h_{-2}: Random Walk FM — accumulated white noise
             if h(1) > 0
-                w = randn * sqrt(h(1) / dt);
-                obj.fs_neg2(2:end) = obj.fs_neg2(1:end-1);
-                obj.fs_neg2(1)     = obj.fs_neg2(1) + w;
-                dy = dy + obj.fs_neg2(1);
+                obj.rw_state = obj.rw_state + randn * sqrt(h(1) / dt);
+                dy = dy + obj.rw_state;
             end
 
-            % h_-1: Flicker FM  (approximate moving-average; see class note)
+            % h_{-1}: Flicker FM — Kasdin-Walter FIR (half-order integration)
             if h(2) > 0
-                w = randn * sqrt(h(2) * 2*log(2));
-                obj.fs_neg1(2:end) = obj.fs_neg1(1:end-1);
-                obj.fs_neg1(1)     = w;
-                n  = min(10, length(obj.fs_neg1));
-                wt = 1 ./ sqrt(1:n);
-                dy = dy + sum(obj.fs_neg1(1:n) .* wt') / sqrt(dt);
+                w = randn * sqrt(h(2) * 2*log(2) / dt);
+                obj.kw_buf_neg1 = [w; obj.kw_buf_neg1(1:end-1)];
+                dy = dy + obj.kw_c_neg1' * obj.kw_buf_neg1;
             end
 
-            % h_0: White FM
-            % σ_y(τ) = sqrt(h_0 / (2τ))  [IEEE 1139-2008]
+            % h_{0}: White FM
             if h(3) > 0
                 dy = dy + randn * sqrt(h(3) / (2*dt));
             end
 
-            % h_1: Flicker PM  (approximate; see class note)
+            % h_{+1}: Flicker PM — Kasdin-Walter FIR (half-order differentiation)
             if h(4) > 0
                 w = randn * sqrt(h(4) * 2*log(2) / dt);
-                obj.fs_pos1(2:end) = obj.fs_pos1(1:end-1);
-                obj.fs_pos1(1)     = w;
-                n  = min(5, length(obj.fs_pos1));
-                wt = 1 ./ sqrt(1:n);
-                dy = dy + sum(obj.fs_pos1(1:n) .* wt');
+                obj.kw_buf_pos1 = [w; obj.kw_buf_pos1(1:end-1)];
+                dy = dy + obj.kw_c_pos1' * obj.kw_buf_pos1;
             end
 
-            % h_2: White PM  (second-differenced white phase noise)
-            % σ_y contribution ∝ sqrt(h_2 / (2τ³))
+            % h_{+2}: White PM
             if h(5) > 0
                 dy = dy + randn * sqrt(h(5) / (2*dt^3));
             end
 
-            if ~isfinite(dy); dy = 0; end
+            if ~isfinite(dy)
+                warning('Clock:nonFiniteNoise', 'Non-finite noise at t_accum=%.3f; clamping to 0.', obj.t_accum);
+                dy = 0;
+            end
         end
     end
 end
