@@ -7,8 +7,7 @@ save_results(results, cfg);
 plot_experiment(results);
 
 % To view the orbital scenario:
-%   sc = satelliteScenario(...);  % re-create from cfg.scenario if needed
-%   show(sc)
+%   cfg.scenario.sc.show()
 
 % Run multiple experiments:
 % configs = {'PTP_exp_rb_ocxo_same_plane', 'PTP_exp_rb_ocxo_cross_plane', 'PTP_exp_rb_ocxo_inter_shell'};

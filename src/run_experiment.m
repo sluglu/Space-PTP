@@ -14,12 +14,12 @@ end
 % -------------------------------------------------------------------------
 function results = simulate(cfg)
     dt_los      = cfg.sim.dt_los;
-    dt_orbital  = cfg.sim.dt_orbital;
-    total_time  = cfg.sim.sim_duration * 3600;
+    dt_orbital  = cfg.scenario.sc.SampleTime;
+    total_time  = seconds(cfg.scenario.sc.StopTime - cfg.scenario.sc.StartTime);
     min_msg_gap = cfg.sim.min_msg_interval;
 
     % --- Satellite scenario ---
-    [sat_data, sc] = setup_scenario(cfg);  %#ok<ASGLU>
+    sat_data = setup_scenario(cfg);
 
     % --- Nodes: each has id, clock, fsm ---
     n_nodes = length(cfg.nodes);
@@ -28,7 +28,7 @@ function results = simulate(cfg)
     ids     = cell(1, n_nodes);
     for k = 1:n_nodes
         ids{k}    = cfg.nodes{k}.id;
-        clocks{k} = Clock(cfg.nodes{k}.ox, cfg.sim.t0 + cfg.nodes{k}.time_offset);
+        clocks{k} = cfg.nodes{k}.clock;
         fsms{k}   = cfg.nodes{k}.fsm;
     end
 
@@ -66,7 +66,6 @@ function results = simulate(cfg)
                 clocks{k} = clocks{k}.advance(actual_dt);
                 ts = clocks{k}.get_timestamp();
                 [fsms{k}, msgs] = fsms{k}.step(ts);
-                % Apply fractional frequency correction from FSM servo
                 clocks{k}.servo_y = fsms{k}.servo_y;
                 for j = 1:length(msgs)
                     msgs{j}.from = ids{k};
@@ -165,17 +164,8 @@ end
 
 
 % -------------------------------------------------------------------------
-function [sat_data, sc] = setup_scenario(cfg)
-    start_time = cfg.sim.start_time;
-    stop_time  = start_time + hours(cfg.sim.sim_duration);
-    tspan      = 0 : cfg.sim.dt_orbital : cfg.sim.sim_duration * 3600;
-
-    sc = satelliteScenario(start_time, stop_time, cfg.sim.dt_orbital);
-
-    node1_sc = create_platform(sc, cfg.scenario.node1, cfg.sim.orbit_propagator, 'Node1');
-    node2_sc = create_platform(sc, cfg.scenario.node2, cfg.sim.orbit_propagator, 'Node2');
-
-    sat_data = precompute_satellite_data(node1_sc, node2_sc, start_time, tspan, cfg.sim.carrier_frequency);
+function sat_data = setup_scenario(cfg)
+    sat_data = precompute_satellite_data(cfg.scenario);
     sat_data = filter_short_los(sat_data, cfg.sim.min_los_duration);
 end
 
@@ -206,16 +196,6 @@ function sat_data = filter_short_los(sat_data, min_duration)
     sat_data.los_flag_interp = @(t_q) interp1(t, double(flags), t_q, 'nearest', 0);
 end
 
-
-% -------------------------------------------------------------------------
-function platform = create_platform(sc, params, propagator, name)
-    if length(params) < 3
-        platform = groundStation(sc, params{1}, params{2}, 'Name', name);
-    else
-        platform = satellite(sc, params{1}, params{2}, params{3}, params{4}, params{5}, params{6}, ...
-                             'OrbitPropagator', propagator, 'Name', name);
-    end
-end
 
 
 % -------------------------------------------------------------------------

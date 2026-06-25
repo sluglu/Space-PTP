@@ -9,10 +9,9 @@ classdef (Abstract) NodeFSM
 % each step().  Outgoing messages must include a 'to' field with the recipient id.
 %
 % Servo convention:
-%   Set servo_y (inherited, default 0) to the desired frequency correction [Hz]
-%   whenever your protocol computes a new estimate.  The loop applies it to
-%   Clock.servo_y, which is added to delta_f0 in Clock.advance().
-%   Protocols without a servo simply leave servo_y at 0.
+%   Set servo_y (fractional, dimensionless) whenever the protocol has a new
+%   frequency estimate.  The loop writes it to clock.servo_y each tick, which
+%   applies it as servo_y × f0 Hz.  Leave at 0 if no servo.
 
     properties (Abstract)
         last_offset   % most recent offset estimate [s]  (NaN if unavailable)
@@ -22,6 +21,8 @@ classdef (Abstract) NodeFSM
     properties
         % Fractional frequency correction computed by servo [dimensionless, y = df/f0].
         % run_experiment copies this to Clock.servo_y after every step().
+        % The FSM is responsible for keeping this at 0 until a valid estimate
+        % is available; the simulation loop applies it unconditionally.
         servo_y = 0
     end
 

@@ -1,21 +1,33 @@
-function ox = ox_base()
-% OX_BASE  Template for writing a new oscillator config.
+function clk = ox_base(t0, overrides)
+% OX_BASE  Template for a new oscillator config.
 %
-% An oscillator config returns a plain struct with these fields:
+% Returns a ready Clock object.  Never construct Clock directly — call an
+% oscillator config instead:
+%
+%   clk = ox_ocxo();
+%   clk = ox_ocxo(t0);
+%   clk = ox_ocxo(t0, struct('alpha', 0, 'kw_n_neg1', 4096));
+%
+% Spec fields (set before calling Clock):
 %
 %   f0                   – nominal frequency [Hz]
-%   delta_f0             – initial frequency offset [Hz]  (0 = none)
-%   alpha                – linear frequency drift [Hz/s]  (0 = none)
-%   h                    – power-law noise coefficients [h_-2, h_-1, h_0, h_1, h_2]
-%                          Set unused terms to 0. Units follow IEEE 1139-2008 S_y(f).
-%   timestamp_resolution – quantisation step for timestamps [s]  (0 = infinite precision)
+%   delta_f0             – initial frequency offset [Hz]
+%   alpha                – linear frequency drift [Hz/s]
+%   h                    – [h_-2, h_-1, h_0, h_1, h_2]  IEEE 1139-2008 S_y(f)
+%   timestamp_resolution – quantisation step [s]  (0 = infinite precision)
+%   kw_n_neg1            – Kasdin-Walter taps for h_{-1}; flicker FM valid up to
+%                          tau ≈ kw_n_neg1·dt/2.  Default 64.
 %
-% Noise process summary:
-%   h(1) h_-2  Random Walk FM  — integrate white FM noise
-%   h(2) h_-1  Flicker FM      — 1/f frequency noise (approx.)
-%   h(3) h_0   White FM        — flat frequency noise
-%   h(4) h_1   Flicker PM      — 1/f phase noise     (approx.)
-%   h(5) h_2   White PM        — flat phase noise
+% Pattern:
+%
+%   function clk = ox_myosc(t0, overrides)
+%       if nargin < 1; t0 = 0; end
+%       spec = struct('f0',...,'delta_f0',...,'alpha',...,'h',[...],'timestamp_resolution',0);
+%       if nargin > 1 && ~isempty(overrides)
+%           for fn = fieldnames(overrides)'; spec.(fn{1}) = overrides.(fn{1}); end
+%       end
+%       clk = Clock(spec, t0);
+%   end
 
 error('ox_base is a template — copy and rename it for your oscillator.');
 end

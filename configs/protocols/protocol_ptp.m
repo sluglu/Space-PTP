@@ -1,40 +1,33 @@
-function nodes = protocol_ptp(ox1, ox2, params)
+function nodes = protocol_ptp(clk1, clk2, options)
 % PROTOCOL_PTP  Two-node IEEE 1588 PTP (master + slave).
+% Returns a 1x2 cell array of node structs {master, slave}.
 %
-%   nodes = protocol_ptp(ox1, ox2)          — use default params
-%   nodes = protocol_ptp(ox1, ox2, params)  — override any field
+%   protocol_ptp(ox_perfect(), ox_ocxo())
+%   protocol_ptp(clk1, clk2, Name, Value, ...)
 %
-%   params fields (all optional):
-%     sync_interval       [s]    — SYNC message period              (default 1)
-%     initial_time_offset [s]    — slave clock offset at t=0        (default 0)
-%     verbose             bool   — print FSM state transitions       (default false)
-%     servo.enabled       bool   — enable PI frequency servo         (default true)
-%     servo.kp            [s^-1] — proportional gain                 (default 0.1)
-%     servo.ki            [s^-2] — integral gain                     (default 0.01)
-
-    if nargin < 3; params = struct(); end
-
-    sync_interval = getfield_default(params, 'sync_interval',       1);
-    servo_default = struct('enabled', true, 'kp', 0.1, 'ki', 0.01, ...
-                           'sync_interval', sync_interval);
-    servo_in      = getfield_default(params, 'servo', struct());
-
-    % Merge user overrides into defaults
-    servo = servo_default;
-    for fn = fieldnames(servo_in)'
-        servo.(fn{1}) = servo_in.(fn{1});
+% Optional name-value overrides:
+%   sync_interval         SYNC period [s]                  (1)
+%   initial_time_offset   Slave clock offset at t=0 [s]    (0)
+%   verbose               Print FSM state transitions      (false)
+%   servo_enabled         PI servo on/off                  (true)
+%   servo_kp              Proportional gain                (0.1)
+%   servo_ki              Integral gain                    (0.01)
+    arguments
+        clk1 (1,1) Clock
+        clk2 (1,1) Clock
+        options.sync_interval       (1,1) double  = 1
+        options.initial_time_offset (1,1) double  = 0
+        options.verbose             (1,1) logical = false
+        options.servo_enabled       (1,1) logical = true
+        options.servo_kp            (1,1) double  = 0.1
+        options.servo_ki            (1,1) double  = 0.01
     end
-    servo.sync_interval = sync_interval;  % always keep consistent
-
-    p = struct( ...
-        'sync_interval',       sync_interval, ...
-        'initial_time_offset', getfield_default(params, 'initial_time_offset', 0), ...
-        'verbose',             getfield_default(params, 'verbose',             false));
 
     nodes = { ...
-        struct('id', 'master', 'ox', ox1, 'time_offset', 0, ...
-               'fsm', PTPMasterFSM('slave',  p.sync_interval, p.verbose)), ...
-        struct('id', 'slave',  'ox', ox2, 'time_offset', p.initial_time_offset, ...
-               'fsm', PTPSlaveFSM('master', servo, p.verbose)) ...
+        struct('id', 'master', 'clock', clk1, 'time_offset', 0, ...
+               'fsm', PTPMasterFSM('slave', 'sync_interval', options.sync_interval, 'verbose', options.verbose)), ...
+        struct('id', 'slave',  'clock', clk2, 'time_offset', options.initial_time_offset, ...
+               'fsm', PTPSlaveFSM('master', 'sync_interval', options.sync_interval, 'verbose', options.verbose, ...
+                                  'servo_enabled', options.servo_enabled, 'servo_kp', options.servo_kp, 'servo_ki', options.servo_ki)) ...
     };
 end

@@ -1,36 +1,34 @@
 % TEST_CLOCK_MODEL
 % Validates the Clock power-law noise model against theoretical Allan deviation
-% and phase noise curves for OCXO and CSAC oscillator specs.
+% and phase noise curves for OCXO and CSAC oscillator configs.
 %
-% Pass criteria (checked quantitatively):
-%   Empirical ADEV at each tau is within a factor of 3 of the theoretical value
-%   for the dominant noise process.  Factor-of-3 tolerance accounts for Monte
-%   Carlo variance at limited simulation length.
+% What is tested:
+%   1. OCXO noise — empirical ADEV matches the OCXO power-law coefficients.
+%      Pass: all tau points within a factor of 3 of theory (printed PASS/FAIL).
+%   2. CSAC noise — empirical ADEV matches the CSAC power-law coefficients.
+%      Pass: all tau points within a factor of 3 of theory (printed PASS/FAIL).
+%
+% Note: stochastic test — check_adev prints PASS/FAIL but does NOT call assert().
+% Large deviations at specific tau values warrant inspection rather than a hard
+% failure, because ADEV at long tau has high Monte Carlo variance.
 
 clear; clc; close all;
 
-%% Parameters
-dt           = 0.01;       % simulation step [s]
-sim_duration = 3600;       % [s]
+%% Setup
+dt           = 1;          % simulation step [s]
+sim_duration = 604800;     % [s] — 7 days; OCXO/CSAC crossover visible near tau ~1400 s
 tol_factor   = 3;          % empirical ADEV must be within this multiple of theory
 
-%% Oscillator specs (from datasheets)
-ocxo = struct( ...
-    'f0',       100e6, ...
-    'delta_f0', (rand()*2-1) * 50, ...
-    'alpha',    (rand()*2-1) * 1.58e-6, ...
-    'h',        [0, 4.62e-23, 1.58e-25, 0, 1.0e-32]);  % OX-249
+% alpha=0: validates stochastic noise only (no deterministic drift)
+% kw_n_neg1=4096*4: flicker FM filter valid up to tau ~2048 s (covers ~1400 s crossover)
+clk_ocxo = ox_ocxo(0, 'alpha', 0, 'kw_n_neg1', 4096*4);
+clk_csac = ox_csac(0, 'alpha', 0);
 
-csac = struct( ...
-    'f0',       10e6, ...
-    'delta_f0', (rand()*2-1) * 5e-4, ...
-    'alpha',    (rand()*2-1) * 3.15e-9, ...
-    'h',        [0, 0, 1.8e-19, 0, 2.0e-28]);           % SA45
+ocxo = struct('f0', 100e6, 'h', [0, 4.62e-23, 1.58e-25, 0, 1.0e-32]);  % for theory curves
+csac = struct('f0',  10e6, 'h', [0, 0, 1.8e-19, 0, 2.0e-28]);
 
-%% Simulate
+%% Run
 N = ceil(sim_duration / dt);
-clk_ocxo = Clock(ocxo, 0);
-clk_csac = Clock(csac, 0);
 
 freq_ocxo = zeros(1, N);
 freq_csac = zeros(1, N);
@@ -46,42 +44,43 @@ for i = 1:N
 end
 progress.finish();
 
-%% Empirical Allan deviation
-tau_emp = logspace(-1, log10(sim_duration/10), 20);
+%% Assertions
+tau_emp = logspace(1, log10(sim_duration/3), 40);  % 10 s … ~200 000 s
 [adev_ocxo, tau_ocxo] = compute_adev(freq_ocxo, 1/dt, ocxo.f0, tau_emp);
 [adev_csac, tau_csac] = compute_adev(freq_csac, 1/dt, csac.f0, tau_emp);
 
-%% Quantitative checks
 fprintf('\n=== Clock Model Validation ===\n');
 
 check_adev('OCXO', tau_ocxo, adev_ocxo, ocxo.h, tol_factor);
 check_adev('CSAC', tau_csac, adev_csac, csac.h, tol_factor);
 
 %% Plots
-tau_th = logspace(-2, 4, 100);
+tau_th = logspace(-5, 6, 300);  % 10 µs … 10^6 s — shows white-FM knee and OCXO/CSAC crossover
 figure('Name', 'Clock Model Validation', 'Position', [100 100 1200 800]);
+
+times     = (0:N-1)*dt;
+frac_ocxo = (freq_ocxo - ocxo.f0) / ocxo.f0;
+frac_csac = (freq_csac - csac.f0) / csac.f0;
 
 % --- ADEV ---
 subplot(2,2,[1 2]);
-loglog(tau_th, arrayfun(@(t) theory_adev(t, ocxo.h), tau_th), 'r--', 'LineWidth', 1, 'HandleVisibility', 'off');
+loglog(tau_th, arrayfun(@(t) theory_adev(t, ocxo.h), tau_th), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
 hold on;
-loglog(tau_th, arrayfun(@(t) theory_adev(t, csac.h), tau_th), 'b--', 'LineWidth', 1, 'HandleVisibility', 'off');
-loglog(tau_ocxo, adev_ocxo, 'r-o', 'DisplayName', 'OCXO (empirical)');
-loglog(tau_csac, adev_csac, 'b-o', 'DisplayName', 'CSAC (empirical)');
-xlabel('\tau [s]'); ylabel('\sigma_y(\tau)');
+loglog(tau_th, arrayfun(@(t) theory_adev(t, csac.h), tau_th), 'b--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
+loglog(tau_ocxo, adev_ocxo, 'r-o', 'MarkerSize', 4, 'DisplayName', 'OCXO (empirical)');
+loglog(tau_csac, adev_csac, 'b-o', 'MarkerSize', 4, 'DisplayName', 'CSAC (empirical)');
+xlabel('\tau (s)'); ylabel('\sigma_y(\tau)');
 title('Allan Deviation — empirical (solid) vs theory (dashed)');
 legend('Location','best'); grid on;
 
-% --- Frequency traces ---
-times = (0:N-1)*dt;
+% --- Frequency traces (both on same plot) ---
 subplot(2,2,3);
-frac_ocxo = (freq_ocxo - ocxo.f0) / ocxo.f0;
-frac_csac = (freq_csac - csac.f0) / csac.f0;
-plot(times, frac_ocxo*1e9, 'r-', 'DisplayName', 'OCXO');
+plot(times, frac_ocxo, 'r-', 'LineWidth', 0.8, 'DisplayName', 'OCXO');
 hold on;
-plot(times, frac_csac*1e9, 'b-', 'DisplayName', 'CSAC');
-xlabel('Time [s]'); ylabel('Fractional frequency [ppb]');
-title('Frequency deviation'); legend('Location','best'); grid on;
+plot(times, frac_csac, 'b-', 'LineWidth', 0.8, 'DisplayName', 'CSAC');
+xlabel('Time (s)'); ylabel('Freq deviation  y = \Deltaf/f_0');
+title('Fractional frequency deviation');
+legend('Location','best'); grid on;
 
 % --- Phase noise PSD ---
 subplot(2,2,4);
@@ -91,17 +90,16 @@ f = fax(2:end);
 Lf_ocxo = 10*log10(0.5 * psd_ocxo(2:end) ./ f.^2);
 Lf_csac = 10*log10(0.5 * psd_csac(2:end) ./ f.^2);
 
-% Theoretical phase noise
-Sy_ocxo = ocxo.h(2)./fax(2:end) + ocxo.h(3) + ocxo.h(5)*fax(2:end).^2;
-Sy_csac = csac.h(3) + csac.h(5)*fax(2:end).^2;
-Lf_ocxo_th = 10*log10(0.5 * ocxo.f0^2 ./ fax(2:end).^2 .* Sy_ocxo);
-Lf_csac_th = 10*log10(0.5 * csac.f0^2 ./ fax(2:end).^2 .* Sy_csac);
+Sy_ocxo    = ocxo.h(2)./f + ocxo.h(3) + ocxo.h(5)*f.^2;
+Sy_csac    = csac.h(3) + csac.h(5)*f.^2;
+Lf_ocxo_th = 10*log10(0.5 * ocxo.f0^2 ./ f.^2 .* Sy_ocxo);
+Lf_csac_th = 10*log10(0.5 * csac.f0^2 ./ f.^2 .* Sy_csac);
 
-semilogx(f, Lf_ocxo, 'r-', 'DisplayName', 'OCXO'); hold on;
-semilogx(f, Lf_csac, 'b-', 'DisplayName', 'CSAC');
+semilogx(f, Lf_ocxo, 'r-', 'LineWidth', 1.2, 'DisplayName', 'OCXO'); hold on;
+semilogx(f, Lf_csac, 'b-', 'LineWidth', 1.2, 'DisplayName', 'CSAC');
 semilogx(f, Lf_ocxo_th, 'r--', 'HandleVisibility','off');
 semilogx(f, Lf_csac_th, 'b--', 'HandleVisibility','off');
-xlabel('Offset frequency [Hz]'); ylabel('L(f) [dBc/Hz]');
+xlabel('Offset frequency (Hz)'); ylabel('L(f) (dBc/Hz)');
 title('Phase noise — empirical (solid) vs theory (dashed)');
 legend('Location','best'); grid on;
 

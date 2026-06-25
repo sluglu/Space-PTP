@@ -23,41 +23,41 @@ function plot_ptp_orbital(results)
     sgtitle(sprintf('PTP Orbital Simulation Results - %s', name), ...
         'FontSize', 16, 'FontWeight', 'bold', 'Interpreter', 'none');
 
-    sim_duration_min = results.meta.cfg.sim.sim_duration * 60;
+    total_time_s = results.times(end);
 
     % --- Plot 1: Propagation delays and PTP delay estimate ---
     subplot(4, 1, 1);
-    plot(results.times/60, results.fwd_delay, 'r', 'DisplayName', 'Forward Propagation Delay', 'LineWidth', 1.2);
+    plot(results.times, results.fwd_delay, 'r', 'DisplayName', 'Forward Propagation Delay', 'LineWidth', 1.2);
     hold on;
-    plot(results.times/60, results.bwd_delay, 'b', 'DisplayName', 'Backward Propagation Delay', 'LineWidth', 1.2);
-    plot(results.times/60, results.delay_est, 'g', 'DisplayName', 'PTP Delay Estimate', 'LineWidth', 1.5);
-    xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 sim_duration_min]);
-    ylabel('Delay [s]', 'FontSize', 10);
+    plot(results.times, results.bwd_delay, 'b', 'DisplayName', 'Backward Propagation Delay', 'LineWidth', 1.2);
+    plot(results.times, results.delay_est, 'g', 'DisplayName', 'PTP Delay Estimate', 'LineWidth', 1.5);
+    xlabel('Time (s)', 'FontSize', 10);
+    xlim([0 total_time_s]);
+    ylabel('Delay (s)', 'FontSize', 10);
     title('Propagation Delays and PTP Delay Estimate', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
     grid on;
 
     % --- Plot 2: Doppler shifts ---
     subplot(4, 1, 2);
-    plot(results.times/60, results.fwd_doppler, 'r', 'DisplayName', 'Forward Doppler Shift', 'LineWidth', 1.2);
+    plot(results.times, results.fwd_doppler, 'r', 'DisplayName', 'Forward Doppler Shift', 'LineWidth', 1.2);
     hold on;
-    plot(results.times/60, results.bwd_doppler, 'b', 'DisplayName', 'Backward Doppler Shift', 'LineWidth', 1.2);
-    xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 sim_duration_min]);
-    ylabel('Doppler Shift [Hz]', 'FontSize', 10);
+    plot(results.times, results.bwd_doppler, 'b', 'DisplayName', 'Backward Doppler Shift', 'LineWidth', 1.2);
+    xlabel('Time (s)', 'FontSize', 10);
+    xlim([0 total_time_s]);
+    ylabel('Fractional Doppler (df/f_0)', 'FontSize', 10);
     title('Doppler Shifts', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
     grid on;
 
     % --- Plot 3: Clock offset and PTP estimate ---
     subplot(4, 1, 3);
-    plot(results.times/60, results.real_offset, 'r-', 'LineWidth', 1.5, 'DisplayName', 'True Offset');
+    plot(results.times, results.real_offset, 'r-', 'LineWidth', 1.5, 'DisplayName', 'True Offset');
     hold on;
-    plot(results.times/60, results.offset_est, 'b-', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
-    ylabel('Clock Offset [s]', 'FontSize', 10);
-    xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 sim_duration_min]);
+    plot(results.times, results.offset_est, 'b-', 'LineWidth', 1.5, 'DisplayName', 'PTP Estimate');
+    ylabel('Clock Offset (s)', 'FontSize', 10);
+    xlabel('Time (s)', 'FontSize', 10);
+    xlim([0 total_time_s]);
     title('Clock Offset and PTP Offset Estimate', 'FontSize', 11, 'FontWeight', 'bold');
     legend('show', 'Location', 'best', 'FontSize', 9);
     grid on;
@@ -65,7 +65,7 @@ function plot_ptp_orbital(results)
     % --- Plot 4: PTP offset error ---
     subplot(4, 1, 4);
     offset_error = results.offset_est - results.real_offset;
-    plot(results.times/60, offset_error, 'g-', 'LineWidth', 1.5, 'DisplayName', 'PTP Offset Error');
+    plot(results.times, offset_error, 'g-', 'LineWidth', 1.5, 'DisplayName', 'PTP Offset Error');
     hold on;
 
     valid_idx = ~isnan(offset_error);
@@ -79,9 +79,9 @@ function plot_ptp_orbital(results)
              'EdgeColor', 'black', 'VerticalAlignment', 'top');
     end
 
-    ylabel('Offset Error [s]', 'FontSize', 10);
-    xlabel('Time [min]', 'FontSize', 10);
-    xlim([0 sim_duration_min]);
+    ylabel('Offset Error (s)', 'FontSize', 10);
+    xlabel('Time (s)', 'FontSize', 10);
+    xlim([0 total_time_s]);
     title('PTP Clock Offset Error', 'FontSize', 11, 'FontWeight', 'bold');
     grid on;
 

@@ -1,26 +1,25 @@
-function nodes = protocol_base(ox1, ox2, params)
-% PROTOCOL_BASE  Template for writing a new protocol config.
+function nodes = protocol_base(clk1, clk2, params)
+% PROTOCOL_BASE  Template for a new protocol config.
 %
-% A protocol config builds the cfg.nodes cell array consumed by run_experiment.
-% Each node must be a struct with these fields:
+% Takes two Clock objects (from ox_*) and returns a nodes cell array:
 %
-%   id           – string identifier used for message routing (unique per node)
-%   ox           – oscillator struct (from ox_perfect, ox_ocxo, ox_csac, ...)
-%   time_offset  – clock offset at t=0 relative to cfg.sim.t0 [s]
-%   fsm          – a NodeFSM subclass instance
+%   nodes = protocol_ptp(ox_perfect(), ox_ocxo());
 %
-% FSM classes live under fsm/<ProtocolName>/. Subclass NodeFSM and implement
-% step(), receive(), reset(), and expose last_offset / last_delay properties.
+% Each node struct must have:
+%   id          – string, unique per node
+%   clock       – Clock object from ox_*
+%   time_offset – initial clock offset at t=0 [s]  (usually 0)
+%   fsm         – NodeFSM subclass instance
 %
-% Example — symmetric two-node protocol where both nodes use the same FSM:
+% Pattern:
 %
-%   if nargin < 3; params = struct(); end
-%   nodes = {
-%       struct('id', 'A', 'ox', ox1, 'time_offset', 0,
-%              'fsm', MySymmetricFSM('B', params)),
-%       struct('id', 'B', 'ox', ox2, 'time_offset', 0,
-%              'fsm', MySymmetricFSM('A', params))
-%   };
+%   function nodes = protocol_myproto(clk1, clk2, params)
+%       if nargin < 3; params = struct(); end
+%       nodes = {
+%           struct('id','A','clock',clk1,'time_offset',0,'fsm',MyFSM('B',params)),
+%           struct('id','B','clock',clk2,'time_offset',0,'fsm',MyFSM('A',params))
+%       };
+%   end
 
 error('protocol_base is a template — copy and rename it for your protocol.');
 end

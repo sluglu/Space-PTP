@@ -4,16 +4,29 @@ classdef PTPMasterFSM < NodeFSM
         last_delay  = NaN
         sync_interval
         next_sync_time = 0
-        slave_id        % id of the node this master sends SYNC to
+        slave_id
         msg_queue = {}
         verbose   = false
     end
 
     methods
-        function obj = PTPMasterFSM(slave_id, sync_interval, verbose)
-            if nargin > 0; obj.slave_id      = slave_id;      end
-            if nargin > 1; obj.sync_interval = sync_interval; else; obj.sync_interval = 1; end
-            if nargin > 2; obj.verbose        = verbose;       end
+        function obj = PTPMasterFSM(slave_id, options)
+        % PTPMasterFSM  IEEE 1588 master node state machine.
+        %
+        %   PTPMasterFSM(slave_id)
+        %   PTPMasterFSM(slave_id, Name, Value, ...)
+        %
+        % Optional name-value overrides:
+        %   sync_interval   SYNC period [s]                (1)
+        %   verbose         Print FSM state transitions    (false)
+            arguments
+                slave_id (1,:) char
+                options.sync_interval (1,1) double  = 1
+                options.verbose       (1,1) logical = false
+            end
+            obj.slave_id      = slave_id;
+            obj.sync_interval = options.sync_interval;
+            obj.verbose       = options.verbose;
         end
 
         function obj = receive(obj, msg, ts)

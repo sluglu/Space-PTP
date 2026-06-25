@@ -1,21 +1,18 @@
 function cfg = exp_base()
-% EXP_BASE  Template for writing a new experiment config.
+% EXP_BASE  Template for a new experiment config.
 %
-% Naming convention: <PROTOCOL>_exp_<oscillators>_<scenario>.m
-%   e.g. PTP_exp_perfect_inter_shell.m
+% Naming: <PROTOCOL>_exp_<oscillators>_<scenario>.m
 %
-% An experiment config composes scenario + oscillators + protocol into cfg:
+%   function cfg = PTP_exp_ocxo_same_plane()
+%       cfg          = sim_base();       % loop parameters
+%       cfg.exp.name = mfilename();
+%       cfg.scenario = sc_same_plane();  % satellite geometry
+%       cfg.nodes    = protocol_ptp(ox_perfect(), ox_ocxo());  % clocks + FSMs
+%   end
 %
-%   cfg          = config_base();         % load simulation defaults
-%   cfg.exp.name = mfilename();
-%   cfg.scenario = sc_inter_shell();      % orbital geometry
-%   cfg.nodes    = protocol_ptp( ...      % protocol + oscillators
-%                      ox_perfect(), ox_ocxo());
-%
-% Optional overrides (see config_base for all fields):
-%   cfg.sim.sim_duration = 2;            % hours
-%   cfg.sim.dt_los       = 0.05;         % finer time step during LOS
-%   cfg.channel_effects  = {@my_effect}; % add delay effects on top of geometric
+%   cfg.scenario.sc.show()                           % visualise before running
+%   cfg = sim_base('dt_los', 0.05);                  % override any sim_base field
+%   cfg.channel_effects = {@my_effect};              % extra delay on top of geometry
 
 error('exp_base is a template — copy and rename it for your experiment.');
 end
